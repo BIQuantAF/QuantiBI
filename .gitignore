@@ -1,0 +1,9 @@
+node_modules/
+.env
+.DS_Store
+quantibi-frontend/node_modules/
+quantibi-backend/node_modules/
+uploads/
+coverage/
+build/
+dist/
