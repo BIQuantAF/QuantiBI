@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { Workspace, CreateWorkspaceForm } from '../types';
 import { apiService } from '../services/api';
 
@@ -33,13 +33,19 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchWorkspaces = async (): Promise<void> => {
+  const fetchWorkspaces = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
-      const fetchedWorkspaces = await apiService.getWorkspaces();
-      setWorkspaces(fetchedWorkspaces);
       
+      console.log('🔍 WorkspaceContext: Fetching workspaces from API...');
+      
+      // Call the real API to get workspaces
+      const fetchedWorkspaces = await apiService.getWorkspaces();
+      console.log('🔍 WorkspaceContext: Fetched workspaces from API:', fetchedWorkspaces);
+      
+      setWorkspaces(fetchedWorkspaces);
+
       // If no current workspace is selected and we have workspaces, select the first one
       if (!currentWorkspace && fetchedWorkspaces.length > 0) {
         setCurrentWorkspace(fetchedWorkspaces[0]);
@@ -47,29 +53,35 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch workspaces';
       setError(errorMessage);
-      console.error('Error fetching workspaces:', err);
+      console.error('❌ WorkspaceContext: Error fetching workspaces:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentWorkspace]);
 
   const createWorkspace = async (workspaceData: CreateWorkspaceForm): Promise<Workspace> => {
     try {
       setLoading(true);
       setError(null);
-      const newWorkspace = await apiService.createWorkspace(workspaceData);
-      setWorkspaces(prev => [...prev, newWorkspace]);
       
+      console.log('🔍 WorkspaceContext: Creating workspace via API:', workspaceData);
+      
+      // Call the real API to create workspace
+      const newWorkspace = await apiService.createWorkspace(workspaceData);
+      console.log('🔍 WorkspaceContext: Created workspace via API:', newWorkspace);
+      
+      setWorkspaces(prev => [...prev, newWorkspace]);
+
       // If this is the first workspace, select it
       if (workspaces.length === 0) {
         setCurrentWorkspace(newWorkspace);
       }
-      
+
       return newWorkspace;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create workspace';
       setError(errorMessage);
-      console.error('Error creating workspace:', err);
+      console.error('❌ WorkspaceContext: Error creating workspace:', err);
       throw err;
     } finally {
       setLoading(false);

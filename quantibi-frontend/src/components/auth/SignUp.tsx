@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LoginForm } from '../../types';
+import { SignUpForm } from '../../types';
 
-const Login: React.FC = () => {
-  const [formData, setFormData] = useState<LoginForm>({
+const SignUp: React.FC = () => {
+  const [formData, setFormData] = useState<SignUpForm>({
     email: '',
     password: '',
+    confirmPassword: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, loginWithGoogle } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,10 +20,7 @@ const Login: React.FC = () => {
 
   // Test if component is loading
   useEffect(() => {
-    console.log('🚀 Login component loaded');
-    console.log('🚀 Login component: Environment check:', {
-      REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY ? '✅ Set' : '❌ Missing',
-    });
+    console.log('🚀 SignUp component loaded');
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,26 +36,33 @@ const Login: React.FC = () => {
     setIsLoading(true);
     setError('');
 
-    console.log('🔍 Login attempt with:', { email: formData.email, password: formData.password ? '***' : 'empty' });
-    console.log('🔍 Firebase config check:', {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY ? '✅ Set' : '❌ Missing',
-      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN ? '✅ Set' : '❌ Missing',
-      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID ? '✅ Set' : '❌ Missing',
-    });
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('🔍 Signup attempt with:', { email: formData.email, password: formData.password ? '***' : 'empty' });
 
     try {
-      console.log('🔍 Calling login function...');
-      await login(formData.email, formData.password);
-      console.log('✅ Login successful, navigating to:', from);
+      console.log('🔍 Calling signup function...');
+      await signup(formData.email, formData.password);
+      console.log('✅ Signup successful, navigating to:', from);
       navigate(from, { replace: true });
     } catch (err) {
-      console.error('❌ Login error:', err);
+      console.error('❌ Signup error:', err);
       if (err instanceof Error) {
         console.log('❌ Error message:', err.message);
         setError(err.message);
       } else {
         console.log('❌ Unknown error type:', typeof err);
-        setError('Failed to sign in. Please check your credentials.');
+        setError('Failed to create account. Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -92,10 +97,10 @@ const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            QuantiBI
+            Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your account
+            Start your QuantiBI journey
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -124,11 +129,27 @@ const Login: React.FC = () => {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
                 value={formData.password}
+                onChange={handleChange}
+              />
+            </div>
+            <div>
+              <label htmlFor="confirmPassword" className="sr-only">
+                Confirm Password
+              </label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Confirm Password"
+                value={formData.confirmPassword}
                 onChange={handleChange}
               />
             </div>
@@ -149,10 +170,10 @@ const Login: React.FC = () => {
               {isLoading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Signing in...
+                  Creating account...
                 </div>
               ) : (
-                'Sign In'
+                'Sign Up'
               )}
             </button>
           </div>
@@ -176,7 +197,7 @@ const Login: React.FC = () => {
               {isGoogleLoading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
-                  Signing in with Google...
+                  Signing up with Google...
                 </div>
               ) : (
                 <div className="flex items-center">
@@ -198,27 +219,19 @@ const Login: React.FC = () => {
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                     />
                   </svg>
-                  Sign in with Google
+                  Sign up with Google
                 </div>
               )}
             </button>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="text-center">
             <div className="text-sm">
               <Link
-                to="/password-reset"
+                to="/login"
                 className="font-medium text-indigo-600 hover:text-indigo-500"
               >
-                Forgot password?
-              </Link>
-            </div>
-            <div className="text-sm">
-              <Link
-                to="/signup"
-                className="font-medium text-indigo-600 hover:text-indigo-500"
-              >
-                Sign up for free
+                Already have an account? Sign In
               </Link>
             </div>
           </div>
@@ -228,4 +241,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+export default SignUp;
