@@ -10,9 +10,7 @@ import {
   DatabaseConnectionForm,
   ChartCreationForm,
   AIChartRequest,
-  AIChartResponse,
-  ApiResponse,
-  PaginatedResponse
+  AIChartResponse
 } from '../types';
 
 class ApiService {

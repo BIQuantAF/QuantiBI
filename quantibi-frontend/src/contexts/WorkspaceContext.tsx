@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { Workspace, CreateWorkspaceForm } from '../types';
 import { apiService } from '../services/api';
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,7 +7,6 @@ const WorkspaceHome: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { currentWorkspace, selectWorkspace } = useWorkspace();
   const { currentUser } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (workspaceId && currentUser) {

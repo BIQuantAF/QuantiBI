@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { DatabaseConnectionForm, Database } from '../../types';
 import { apiService } from '../../services/api';
 
 const Datasets: React.FC = () => {
-  const { workspaceId } = useParams<{ workspaceId: string }>();
   const { currentWorkspace } = useWorkspace();
   const [showConnectionForm, setShowConnectionForm] = useState(false);
   const [selectedDatabaseType, setSelectedDatabaseType] = useState<Database['type']>('PostgreSQL');
@@ -21,14 +20,7 @@ const Datasets: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Fetch existing database connections
-  useEffect(() => {
-    if (currentWorkspace) {
-      fetchDatabases();
-    }
-  }, [currentWorkspace]);
-
-  const fetchDatabases = async () => {
+  const fetchDatabases = useCallback(async () => {
     if (!currentWorkspace) return;
     
     try {
@@ -47,7 +39,14 @@ const Datasets: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentWorkspace]);
+
+  // Fetch existing database connections
+  useEffect(() => {
+    if (currentWorkspace) {
+      fetchDatabases();
+    }
+  }, [currentWorkspace, fetchDatabases]);
 
   const databaseTypes: Database['type'][] = [
     'PostgreSQL',

@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 const WorkspaceSettings: React.FC = () => {
-  const { workspaceId } = useParams<{ workspaceId: string }>();
   const { currentWorkspace } = useWorkspace();
   const { currentUser } = useAuth();
   const [showInviteForm, setShowInviteForm] = useState(false);
