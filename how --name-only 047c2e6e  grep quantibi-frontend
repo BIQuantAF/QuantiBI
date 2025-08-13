@@ -1,0 +1,7 @@
+[33mcommit 047c2e6e690a2b2ea4710d637e711234e019f96e[m
+Author: BIQuantAF <atfitzgerald13@gmail.com>
+Date:   Fri Aug 8 17:57:21 2025 +0100
+
+    chore: convert frontend from nested repo, add root .gitignore, routing/nav fixes
+
+.gitignore
