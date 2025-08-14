@@ -69,7 +69,23 @@ app.get('/', (req, res) => {
   res.json({
     message: 'QuantiBI API is running',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    firebase: {
+      projectId: process.env.FIREBASE_PROJECT_ID ? 'Set' : 'Missing',
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL ? 'Set' : 'Missing',
+      privateKey: process.env.FIREBASE_PRIVATE_KEY ? 'Set' : 'Missing'
+    }
+  });
+});
+
+// Test endpoint without authentication
+app.get('/api/test', (req, res) => {
+  res.json({
+    message: 'Test endpoint working',
+    timestamp: new Date().toISOString(),
+    headers: {
+      authorization: req.headers.authorization ? 'Present' : 'Missing'
+    }
   });
 });
 

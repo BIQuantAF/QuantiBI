@@ -113,6 +113,17 @@ class ApiService {
     await this.api.delete(`/workspaces/${workspaceId}/datasets/${datasetId}`);
   }
 
+  async getDatabaseSchemas(workspaceId: string, databaseId: string): Promise<string[]> {
+    const response = await this.api.get(`/workspaces/${workspaceId}/databases/${databaseId}/schemas`);
+    return response.data;
+  }
+
+  async getDatabaseTables(workspaceId: string, databaseId: string, schema?: string): Promise<string[]> {
+    const params = schema ? { schema } : {};
+    const response = await this.api.get(`/workspaces/${workspaceId}/databases/${databaseId}/tables`, { params });
+    return response.data;
+  }
+
   // Chart APIs
   async getCharts(workspaceId: string): Promise<Chart[]> {
     const response = await this.api.get(`/workspaces/${workspaceId}/charts`);
@@ -135,7 +146,7 @@ class ApiService {
 
   // AI Chart Generation
   async generateChartWithAI(workspaceId: string, aiRequest: AIChartRequest): Promise<AIChartResponse> {
-    const response = await this.api.post(`/workspaces/${workspaceId}/charts/ai-generate`, aiRequest);
+    const response = await this.api.post(`/workspaces/${workspaceId}/charts/generate`, aiRequest);
     return response.data;
   }
 

@@ -101,7 +101,7 @@ export interface ChartStyle {
 export interface Chart {
   _id: string;
   name: string;
-  type: 'bar' | 'line' | 'pie' | 'scatter' | 'radar';
+  type: 'bar' | 'line' | 'pie' | 'scatter' | 'radar' | 'area';
   workspace: string;
   dataset: string;
   dashboard?: string;

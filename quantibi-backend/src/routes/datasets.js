@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
 const Dataset = require('../models/Dataset');
 const Workspace = require('../models/Workspace');
+const Database = require('../models/Database');
 
 /**
  * @route   GET /api/workspaces/:workspaceId/datasets
@@ -24,7 +25,7 @@ router.get('/:workspaceId/datasets', authenticateUser, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const datasets = await Dataset.find({ workspace: workspace._id });
+    const datasets = await Dataset.find({ workspace: workspace._id }).populate('database');
     res.json(datasets);
   } catch (error) {
     console.error('Error fetching datasets:', error);
@@ -137,6 +138,96 @@ router.delete('/:workspaceId/datasets/:datasetId', authenticateUser, async (req,
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  }
+});
+
+/**
+ * @route   GET /api/workspaces/:workspaceId/databases/:databaseId/schemas
+ * @desc    Get available schemas for a database
+ * @access  Private
+ */
+router.get('/:workspaceId/databases/:databaseId/schemas', authenticateUser, async (req, res) => {
+  try {
+    const workspace = await Workspace.findById(req.params.workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Get the database to determine available schemas
+    const database = await Database.findById(req.params.databaseId);
+    if (!database) {
+      return res.status(404).json({ message: 'Database not found' });
+    }
+
+    // For file-based databases, return the sheet name or default schema
+    if (database.type === 'XLS') {
+      const schemas = [database.sheetName || 'Sheet1'];
+      res.json(schemas);
+    } else if (database.type === 'CSV') {
+      const schemas = ['default'];
+      res.json(schemas);
+    } else {
+      // For other database types, return default schemas
+      const schemas = ['default', 'public'];
+      res.json(schemas);
+    }
+  } catch (error) {
+    console.error('Error fetching schemas:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route   GET /api/workspaces/:workspaceId/databases/:databaseId/tables
+ * @desc    Get available tables for a database and schema
+ * @access  Private
+ */
+router.get('/:workspaceId/databases/:databaseId/tables', authenticateUser, async (req, res) => {
+  try {
+    const workspace = await Workspace.findById(req.params.workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { schema } = req.query;
+    
+    // Get the database to determine available tables
+    const database = await Database.findById(req.params.databaseId);
+    if (!database) {
+      return res.status(404).json({ message: 'Database not found' });
+    }
+
+    // For file-based databases, return the sheet name or default table
+    if (database.type === 'XLS') {
+      const tables = [database.sheetName || 'Sheet1'];
+      res.json(tables);
+    } else if (database.type === 'CSV') {
+      const tables = ['data'];
+      res.json(tables);
+    } else {
+      // For other database types, return default tables
+      const tables = ['data', 'Sheet1', 'Sheet2', 'Sheet3'];
+      res.json(tables);
+    }
+  } catch (error) {
+    console.error('Error fetching tables:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

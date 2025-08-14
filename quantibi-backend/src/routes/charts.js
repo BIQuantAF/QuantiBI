@@ -169,7 +169,7 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
     console.log('Received chart generation request:', {
       workspaceId: req.params.workspaceId,
       query: req.body.query,
-      datasets: req.body.datasets
+      dataset: req.body.dataset
     });
 
     const workspace = await Workspace.findById(req.params.workspaceId);
@@ -185,75 +185,70 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { query, datasets } = req.body;
+    const { query, dataset } = req.body;
 
-    if (!datasets || datasets.length === 0) {
-      return res.status(400).json({ message: 'No datasets provided' });
+    if (!dataset) {
+      return res.status(400).json({ message: 'No dataset provided' });
     }
 
     // Get dataset details with database information
-    const datasetDetails = await Promise.all(
-      datasets.map(async (d) => {
-        console.log('Fetching dataset:', d.id);
-        const dataset = await Dataset.findOne({
-          _id: d.id,
-          workspace: workspace._id
-        }).populate('database');
-        
-        if (!dataset) {
-          throw new Error(`Dataset ${d.id} not found`);
-        }
+    console.log('Fetching dataset:', dataset);
+    const datasetObj = await Dataset.findOne({
+      _id: dataset,
+      workspace: workspace._id
+    }).populate('database');
+    
+    if (!datasetObj) {
+      return res.status(404).json({ message: 'Dataset not found' });
+    }
 
-        // For Excel files, read the data and column information
-        let dataInfo = {};
-        if (dataset.database.type === 'XLS') {
-          console.log('Reading Excel file:', dataset.database.filePath);
-          const workbook = xlsx.readFile(dataset.database.filePath);
-          const worksheet = workbook.Sheets[dataset.database.sheetName || workbook.SheetNames[0]];
-          const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-          
-          // Get headers from first row
-          const headers = data[0];
-          
-          // Only include the first 5 rows of data for the prompt
-          const sampleData = data.slice(1, 6).map(row => {
-            const obj = {};
-            headers.forEach((header, index) => {
-              obj[header] = row[index];
-            });
-            return obj;
-          });
+    const datasetDetails = [{
+      id: datasetObj._id,
+      name: datasetObj.name,
+      schema: datasetObj.schema,
+      table: datasetObj.table,
+      database: {
+        type: datasetObj.database.type,
+        filePath: datasetObj.database.filePath,
+        sheetName: datasetObj.database.sheetName,
+        host: datasetObj.database.host,
+        port: datasetObj.database.port,
+        databaseName: datasetObj.database.databaseName,
+        username: datasetObj.database.username,
+        password: datasetObj.database.password
+      }
+    }];
 
-          dataInfo = {
-            columns: headers,
-            sampleData: sampleData,
-            totalRows: data.length - 1 // Exclude header row
-          };
-          console.log('Excel data loaded:', {
-            rowCount: data.length - 1,
-            columns: headers
-          });
-        }
+    // For Excel files, read the data and column information
+    if (datasetObj.database.type === 'XLS') {
+      console.log('Reading Excel file:', datasetObj.database.filePath);
+      const workbook = xlsx.readFile(datasetObj.database.filePath);
+      const worksheet = workbook.Sheets[datasetObj.database.sheetName || workbook.SheetNames[0]];
+      const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      // Get headers from first row
+      const headers = data[0];
+      
+      // Only include the first 5 rows of data for the prompt
+      const sampleData = data.slice(1, 6).map(row => {
+        const obj = {};
+        headers.forEach((header, index) => {
+          obj[header] = row[index];
+        });
+        return obj;
+      });
 
-        return {
-          id: dataset._id,
-          name: dataset.name,
-          schema: dataset.schema,
-          table: dataset.table,
-          database: {
-            type: dataset.database.type,
-            filePath: dataset.database.filePath,
-            sheetName: dataset.database.sheetName,
-            host: dataset.database.host,
-            port: dataset.database.port,
-            databaseName: dataset.database.databaseName,
-            username: dataset.database.username,
-            password: dataset.database.password,
-            ...dataInfo
-          }
-        };
-      })
-    );
+      datasetDetails[0].database = {
+        ...datasetDetails[0].database,
+        columns: headers,
+        sampleData: sampleData,
+        totalRows: data.length - 1 // Exclude header row
+      };
+      console.log('Excel data loaded:', {
+        rowCount: data.length - 1,
+        columns: headers
+      });
+    }
 
     console.log('Dataset details loaded');
 
@@ -316,7 +311,7 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
     console.log('Sending prompt to OpenAI');
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -327,8 +322,9 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
           content: prompt
         }
       ],
-      temperature: 0.7,
-      max_tokens: 1000
+      temperature: parseFloat(process.env.OPENAI_TEMPERATURE) || 0.3,
+      max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 1000,
+      response_format: { type: "json_object" }
     });
 
     console.log('Received OpenAI response:', completion.choices[0].message.content);
@@ -694,7 +690,7 @@ Help modify the chart based on the user's request by providing:
 
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -705,8 +701,9 @@ Help modify the chart based on the user's request by providing:
           content: prompt
         }
       ],
-      temperature: 0.7,
-      max_tokens: 1000
+      temperature: parseFloat(process.env.OPENAI_TEMPERATURE) || 0.3,
+      max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 1000,
+      response_format: { type: "json_object" }
     });
 
     if (!completion || !completion.choices || !completion.choices[0]) {

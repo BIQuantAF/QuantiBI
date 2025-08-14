@@ -7,6 +7,7 @@ import Workspaces from './components/workspaces/Workspaces';
 import WorkspaceHome from './components/workspace/WorkspaceHome';
 import Datasets from './components/datasets/Datasets';
 import Charts from './components/charts/Charts';
+import CreateChart from './components/charts/CreateChart';
 import Dashboards from './components/dashboards/Dashboards';
 import WorkspaceSettings from './components/workspace/WorkspaceSettings';
 import Navigation from './components/common/Navigation';
@@ -62,6 +63,14 @@ const App: React.FC = () => {
                   <div>
                     <Navigation />
                     <Charts />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/workspace/:workspaceId/charts/create" element={
+                <ProtectedRoute>
+                  <div>
+                    <Navigation />
+                    <CreateChart />
                   </div>
                 </ProtectedRoute>
               } />

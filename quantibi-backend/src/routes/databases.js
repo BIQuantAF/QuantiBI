@@ -108,6 +108,28 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
     console.log('Creating database:', database);
     await database.save();
     console.log('Database created successfully');
+
+    // Automatically create a dataset for file-based databases
+    if (type === 'XLS' || type === 'CSV') {
+      try {
+        const dataset = new Dataset({
+          workspace: workspace._id,
+          name: displayName,
+          type: 'Physical',
+          database: database._id,
+          schema: type === 'XLS' ? (sheetName || 'Sheet1') : 'default',
+          table: type === 'XLS' ? (sheetName || 'Sheet1') : 'data',
+          owner: req.user.uid
+        });
+        
+        await dataset.save();
+        console.log('Auto-created dataset for file database:', dataset.name);
+      } catch (datasetError) {
+        console.error('Error creating auto-dataset:', datasetError);
+        // Don't fail the database creation if dataset creation fails
+      }
+    }
+
     res.status(201).json(database);
   } catch (error) {
     console.error('Error connecting database:', error);

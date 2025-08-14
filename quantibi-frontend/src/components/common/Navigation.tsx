@@ -1,10 +1,13 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWorkspace } from '../../contexts/WorkspaceContext';
 
 const Navigation: React.FC = () => {
   const { logout, currentUser } = useAuth();
+  const { currentWorkspace } = useWorkspace();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = async () => {
     try {
@@ -13,6 +16,20 @@ const Navigation: React.FC = () => {
     } catch (error) {
       console.error('Logout failed:', error);
     }
+  };
+
+  const handleSettings = () => {
+    if (currentWorkspace) {
+      navigate(`/workspace/${currentWorkspace._id}/settings`);
+    }
+  };
+
+  const isActive = (path: string) => {
+    return location.pathname.includes(path);
+  };
+
+  const getWorkspacePath = (path: string) => {
+    return currentWorkspace ? `/workspace/${currentWorkspace._id}${path}` : '/workspaces';
   };
 
   return (
@@ -25,12 +42,66 @@ const Navigation: React.FC = () => {
                 QuantiBI
               </Link>
             </div>
+            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <Link
+                to="/workspaces"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  isActive('/workspaces') && !currentWorkspace
+                    ? 'border-indigo-500 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Home
+              </Link>
+              {currentWorkspace && (
+                <>
+                  <Link
+                    to={getWorkspacePath('/dashboards')}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      isActive('/dashboards')
+                        ? 'border-indigo-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    }`}
+                  >
+                    Dashboards
+                  </Link>
+                  <Link
+                    to={getWorkspacePath('/charts')}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      isActive('/charts')
+                        ? 'border-indigo-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    }`}
+                  >
+                    Charts
+                  </Link>
+                  <Link
+                    to={getWorkspacePath('/datasets')}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      isActive('/datasets')
+                        ? 'border-indigo-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    }`}
+                  >
+                    Datasets
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
               <div className="text-sm text-gray-700">
                 Signed in as: <span className="font-medium">{currentUser.email}</span>
               </div>
+            )}
+            {currentWorkspace && (
+              <button
+                onClick={handleSettings}
+                className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Settings
+              </button>
             )}
             <button
               onClick={handleLogout}
