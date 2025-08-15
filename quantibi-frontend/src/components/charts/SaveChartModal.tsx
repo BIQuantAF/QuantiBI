@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Dashboard } from '../../types';
 import { apiService } from '../../services/api';
 
@@ -28,18 +28,18 @@ const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId,
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadDashboards();
-  }, [workspaceId]);
-
-  const loadDashboards = async () => {
+  const loadDashboards = useCallback(async () => {
     try {
       const dashboardsData = await apiService.getDashboards(workspaceId);
       setDashboards(dashboardsData);
     } catch (err) {
       console.error('Error loading dashboards:', err);
     }
-  };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    loadDashboards();
+  }, [loadDashboards]);
 
   const handleSave = async () => {
     if (!chartName.trim()) {
@@ -51,15 +51,12 @@ const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId,
     setError(null);
 
     try {
-      let dashboardId = selectedDashboard;
-
       // Create new dashboard if requested
       if (showNewDashboardForm && newDashboardName.trim()) {
-        const newDashboard = await apiService.createDashboard(workspaceId, {
+        await apiService.createDashboard(workspaceId, {
           name: newDashboardName.trim(),
           description: `Dashboard created for chart: ${chartName}`
         });
-        dashboardId = newDashboard._id;
       }
 
       // Save the chart

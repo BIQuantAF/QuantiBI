@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chart, Dataset, Dashboard } from '../../types';
 import { apiService } from '../../services/api';
@@ -14,15 +14,7 @@ const Charts: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (workspaceId) {
-      loadCharts();
-      loadDatasets();
-      loadDashboards();
-    }
-  }, [workspaceId]);
-
-  const loadCharts = async () => {
+  const loadCharts = useCallback(async () => {
     try {
       const chartsData = await apiService.getCharts(workspaceId!);
       setCharts(chartsData);
@@ -30,18 +22,18 @@ const Charts: React.FC = () => {
       setError('Failed to load charts');
       console.error('Error loading charts:', err);
     }
-  };
+  }, [workspaceId]);
 
-  const loadDatasets = async () => {
+  const loadDatasets = useCallback(async () => {
     try {
       const datasetsData = await apiService.getDatasets(workspaceId!);
       setDatasets(datasetsData);
     } catch (err) {
       console.error('Error loading datasets:', err);
     }
-  };
+  }, [workspaceId]);
 
-  const loadDashboards = async () => {
+  const loadDashboards = useCallback(async () => {
     try {
       const dashboardsData = await apiService.getDashboards(workspaceId!);
       setDashboards(dashboardsData);
@@ -50,7 +42,15 @@ const Charts: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (workspaceId) {
+      loadCharts();
+      loadDatasets();
+      loadDashboards();
+    }
+  }, [workspaceId, loadCharts, loadDatasets, loadDashboards]);
 
   const handleCreateChart = () => {
     navigate(`/workspace/${workspaceId}/charts/create`);
