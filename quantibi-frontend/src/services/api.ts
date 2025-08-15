@@ -84,9 +84,33 @@ class ApiService {
     return response.data;
   }
 
-  async createDatabase(workspaceId: string, databaseData: DatabaseConnectionForm): Promise<Database> {
-    const response = await this.api.post(`/workspaces/${workspaceId}/databases`, databaseData);
-    return response.data;
+  async createDatabase(workspaceId: string, databaseData: DatabaseConnectionForm, file?: File): Promise<Database> {
+    if (file && (databaseData.type === 'XLS' || databaseData.type === 'CSV')) {
+      // For file-based databases, use FormData
+      const formData = new FormData();
+      
+      // Add all the database data
+      Object.keys(databaseData).forEach(key => {
+        const value = databaseData[key as keyof DatabaseConnectionForm];
+        if (value !== undefined && value !== null) {
+          formData.append(key, value.toString());
+        }
+      });
+      
+      // Add the file
+      formData.append('file', file);
+      
+      const response = await this.api.post(`/workspaces/${workspaceId}/databases`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } else {
+      // For non-file databases, use JSON
+      const response = await this.api.post(`/workspaces/${workspaceId}/databases`, databaseData);
+      return response.data;
+    }
   }
 
   async testDatabaseConnection(workspaceId: string, databaseData: DatabaseConnectionForm): Promise<{ success: boolean; message: string }> {

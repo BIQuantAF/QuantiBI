@@ -36,7 +36,9 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
     console.log('Received database connection request:', {
       workspaceId: req.params.workspaceId,
       body: req.body,
-      file: req.file
+      file: req.file,
+      files: req.files,
+      headers: req.headers['content-type']
     });
 
     const workspace = await Workspace.findById(req.params.workspaceId);
@@ -80,10 +82,19 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
     // Handle file uploads
     let filePath = null;
     let fileType = null;
+    console.log('File upload debug:', {
+      hasFile: !!req.file,
+      file: req.file,
+      hasFiles: !!req.files,
+      files: req.files
+    });
+    
     if (req.file) {
       filePath = req.file.path;
       fileType = req.file.mimetype;
       console.log('File uploaded:', { filePath, fileType });
+    } else {
+      console.log('No file uploaded - req.file is null');
     }
 
     const database = new Database({

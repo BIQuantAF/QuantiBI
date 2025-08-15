@@ -124,6 +124,12 @@ const CreateChart: React.FC = () => {
       setProcessingStep('Creating chart...');
       await new Promise(resolve => setTimeout(resolve, 1000));
 
+      // Transform data from Chart.js format to the format expected by ChartRenderer
+      const transformedData = aiResponse.data.labels.map((label: string, index: number) => ({
+        label: label,
+        value: aiResponse.data.datasets[0].data[index]
+      }));
+
       // Create chart data
       const newChartData: ChartData = {
         name: '',
@@ -131,7 +137,7 @@ const CreateChart: React.FC = () => {
         dataset: selectedDataset,
         query: userQuery,
         sql: aiResponse.sql,
-        data: aiResponse.data,
+        data: transformedData,
         style: {
           colors: ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'],
           backgroundColor: '#FFFFFF',

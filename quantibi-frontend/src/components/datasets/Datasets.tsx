@@ -13,6 +13,7 @@ const Datasets: React.FC = () => {
     name: '',
     displayName: '',
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [databases, setDatabases] = useState<Database[]>([]);
@@ -205,6 +206,7 @@ const Datasets: React.FC = () => {
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
+                  setSelectedFile(file);
                   setDatabaseConnectionForm(prev => ({
                     ...prev,
                     filePath: file.name,
@@ -278,7 +280,7 @@ const Datasets: React.FC = () => {
       console.log('🔍 Creating database connection:', formData);
       
       // Create the database connection via API
-      const newDatabase = await apiService.createDatabase(currentWorkspace._id, formData);
+      const newDatabase = await apiService.createDatabase(currentWorkspace._id, formData, selectedFile || undefined);
       console.log('✅ Database connection created successfully:', newDatabase);
       
       // Add to local state
@@ -291,6 +293,7 @@ const Datasets: React.FC = () => {
         name: '',
         displayName: '',
       });
+      setSelectedFile(null);
       
       // Clear any previous errors
       setError(null);
