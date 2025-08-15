@@ -198,6 +198,13 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
       workspace: workspace._id
     }).populate('database');
     
+    console.log('Dataset object:', {
+      id: datasetObj?._id,
+      name: datasetObj?.name,
+      databaseType: datasetObj?.database?.type,
+      filePath: datasetObj?.database?.filePath
+    });
+    
     if (!datasetObj) {
       return res.status(404).json({ message: 'Dataset not found' });
     }
@@ -222,9 +229,17 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
     // For Excel files, read the data and column information
     if (datasetObj.database.type === 'XLS') {
       console.log('Reading Excel file:', datasetObj.database.filePath);
-      const workbook = xlsx.readFile(datasetObj.database.filePath);
-      const worksheet = workbook.Sheets[datasetObj.database.sheetName || workbook.SheetNames[0]];
-      const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      if (!datasetObj.database.filePath) {
+        return res.status(400).json({ 
+          message: 'Dataset file path is missing. Please recreate the dataset from the database connection.' 
+        });
+      }
+      
+      try {
+        const workbook = xlsx.readFile(datasetObj.database.filePath);
+        const worksheet = workbook.Sheets[datasetObj.database.sheetName || workbook.SheetNames[0]];
+        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
       
       // Get headers from first row
       const headers = data[0];
@@ -248,6 +263,12 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
         rowCount: data.length - 1,
         columns: headers
       });
+      } catch (error) {
+        console.error('Error reading Excel file:', error);
+        return res.status(500).json({ 
+          message: 'Error reading the Excel file. Please check if the file exists and is accessible.' 
+        });
+      }
     }
 
     console.log('Dataset details loaded');
@@ -368,9 +389,15 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
       if (dataset.database.type === 'XLS') {
         // Read the Excel file again to get the full data
         console.log('Reading Excel file for processing:', dataset.database.filePath);
-        const workbook = xlsx.readFile(dataset.database.filePath);
-        const worksheet = workbook.Sheets[dataset.database.sheetName || workbook.SheetNames[0]];
-        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (!dataset.database.filePath) {
+          throw new Error('Dataset file path is missing');
+        }
+        
+        try {
+          const workbook = xlsx.readFile(dataset.database.filePath);
+          const worksheet = workbook.Sheets[dataset.database.sheetName || workbook.SheetNames[0]];
+          const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
         
         // Get headers from first row
         const headers = data[0];
@@ -584,6 +611,10 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
         if (result) {
           chartData = result;
           break;
+        }
+        } catch (error) {
+          console.error('Error processing Excel file:', error);
+          throw new Error(`Error processing Excel file: ${error.message}`);
         }
       }
     }

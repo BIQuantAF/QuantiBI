@@ -64,7 +64,7 @@ export interface Dataset {
   schema?: string;
   table?: string;
   query?: string;
-  owner: string;
+  owners: string[];
   createdAt: string;
   updatedAt: string;
 }

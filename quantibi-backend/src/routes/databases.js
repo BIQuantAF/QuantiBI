@@ -119,7 +119,7 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
           database: database._id,
           schema: type === 'XLS' ? (sheetName || 'Sheet1') : 'default',
           table: type === 'XLS' ? (sheetName || 'Sheet1') : 'data',
-          owner: req.user.uid
+          owners: [req.user.uid]
         });
         
         await dataset.save();

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Dataset, Chart, Database } from '../../types';
 import { apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 import ChartRenderer from './ChartRenderer';
 import ChartCustomization from './ChartCustomization';
@@ -21,6 +22,7 @@ interface ChartData {
 const CreateChart: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   
   // State for the creation process
   const [step, setStep] = useState<'dataset' | 'query' | 'chart'>('dataset');
@@ -77,7 +79,8 @@ const CreateChart: React.FC = () => {
           type: 'Physical' as const,
           databaseId: database._id,
           schema: database.type === 'XLS' ? (database.sheetName || 'Sheet1') : 'default',
-          table: database.type === 'XLS' ? (database.sheetName || 'Sheet1') : 'data'
+          table: database.type === 'XLS' ? (database.sheetName || 'Sheet1') : 'data',
+          owners: [currentUser?.uid || '']
         };
 
         const newDataset = await apiService.createDataset(workspaceId!, datasetData);
