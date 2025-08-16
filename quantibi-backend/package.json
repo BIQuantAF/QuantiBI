@@ -9,7 +9,13 @@
     "build": "echo 'No build step required for Node.js'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["bi", "analytics", "dashboard", "mongodb", "firebase"],
+  "keywords": [
+    "bi",
+    "analytics",
+    "dashboard",
+    "mongodb",
+    "firebase"
+  ],
   "author": "",
   "license": "ISC",
   "engines": {
@@ -19,6 +25,7 @@
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "firebase-admin": "^11.5.0",

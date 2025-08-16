@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Chart } from '../../types';
+import apiService from '../../services/api';
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  AreaChart, Area, ScatterChart, Scatter,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
 
 interface ChartData {
   name: string;
@@ -18,9 +24,17 @@ interface ChartRendererProps {
 
 const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate }) => {
   const [activeTab, setActiveTab] = useState<'chart' | 'sql' | 'data'>('chart');
+  const [editableSQL, setEditableSQL] = useState(chartData.sql);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+
+  // Update editable SQL when chart data changes
+  useEffect(() => {
+    setEditableSQL(chartData.sql);
+  }, [chartData.sql]);
 
   const renderChart = () => {
-    if (!chartData.data || !Array.isArray(chartData.data)) {
+    if (!chartData.data || !Array.isArray(chartData.data) || chartData.data.length === 0) {
       return (
         <div className="flex items-center justify-center h-64 text-gray-500">
           No data available to display
@@ -28,169 +42,347 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate 
       );
     }
 
-    // Simple chart rendering - in a real implementation, you'd use a charting library like Recharts
+    // Transform data for Recharts (ensure it has the right format)
+    const chartDataForRecharts = chartData.data.map((item: any, index: number) => ({
+      name: item.label || `Item ${index + 1}`,
+      value: item.value || 0,
+      ...item // Include any additional properties
+    }));
+
+    const colors = chartData.style.colors || ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'];
+
     switch (chartData.type) {
       case 'bar':
-        return renderBarChart();
+        return (
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={chartDataForRecharts}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                angle={-45}
+                textAnchor="end"
+                height={80}
+                label={{ 
+                  value: chartData.style.axis?.x?.title || 'Categories', 
+                  position: 'bottom',
+                  offset: 0
+                }}
+              />
+              <YAxis 
+                tick={{ fontSize: 12 }}
+                label={{ 
+                  value: chartData.style.axis?.y?.title || 'Values', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle' }
+                }}
+              />
+              <Tooltip 
+                formatter={(value: any, name: any) => [value, 'Value']}
+                labelFormatter={(label) => `Category: ${label}`}
+              />
+              {chartData.style.legend?.display && (
+                <Legend verticalAlign="top" height={36} />
+              )}
+              <Bar 
+                dataKey="value" 
+                fill={colors[0]}
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+
       case 'line':
-        return renderLineChart();
+        return (
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={chartDataForRecharts}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                angle={-45}
+                textAnchor="end"
+                height={80}
+                label={{ 
+                  value: chartData.style.axis?.x?.title || 'Categories', 
+                  position: 'bottom',
+                  offset: 0
+                }}
+              />
+              <YAxis 
+                tick={{ fontSize: 12 }}
+                label={{ 
+                  value: chartData.style.axis?.y?.title || 'Values', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle' }
+                }}
+              />
+              <Tooltip 
+                formatter={(value: any, name: any) => [value, 'Value']}
+                labelFormatter={(label) => `Category: ${label}`}
+              />
+              {chartData.style.legend?.display && (
+                <Legend verticalAlign="top" height={36} />
+              )}
+              <Line 
+                type="monotone" 
+                dataKey="value" 
+                stroke={colors[0]} 
+                strokeWidth={3}
+                dot={{ fill: colors[0], strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: colors[0], strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        );
+
       case 'pie':
-        return renderPieChart();
-      case 'scatter':
-        return renderScatterChart();
+        return (
+          <ResponsiveContainer width="100%" height={400}>
+            <PieChart>
+              <Pie
+                data={chartDataForRecharts}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                outerRadius={120}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {chartDataForRecharts.map((entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                ))}
+              </Pie>
+              <Tooltip 
+                formatter={(value: any, name: any) => [value, 'Value']}
+                labelFormatter={(label) => `Category: ${label}`}
+              />
+              {chartData.style.legend?.display && (
+                <Legend verticalAlign="top" height={36} />
+              )}
+            </PieChart>
+          </ResponsiveContainer>
+        );
+
       case 'area':
-        return renderAreaChart();
+        return (
+          <ResponsiveContainer width="100%" height={400}>
+            <AreaChart data={chartDataForRecharts}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                angle={-45}
+                textAnchor="end"
+                height={80}
+                label={{ 
+                  value: chartData.style.axis?.x?.title || 'Categories', 
+                  position: 'bottom',
+                  offset: 0
+                }}
+              />
+              <YAxis 
+                tick={{ fontSize: 12 }}
+                label={{ 
+                  value: chartData.style.axis?.y?.title || 'Values', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle' }
+                }}
+              />
+              <Tooltip 
+                formatter={(value: any, name: any) => [value, 'Value']}
+                labelFormatter={(label) => `Category: ${label}`}
+              />
+              {chartData.style.legend?.display && (
+                <Legend verticalAlign="top" height={36} />
+              )}
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke={colors[0]} 
+                fill={colors[0]}
+                fillOpacity={0.3}
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+
+      case 'scatter':
+        return (
+          <ResponsiveContainer width="100%" height={400}>
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="name" 
+                type="category"
+                tick={{ fontSize: 12 }}
+                label={{ 
+                  value: chartData.style.axis?.x?.title || 'Categories', 
+                  position: 'bottom',
+                  offset: 0
+                }}
+              />
+              <YAxis 
+                dataKey="value"
+                tick={{ fontSize: 12 }}
+                label={{ 
+                  value: chartData.style.axis?.y?.title || 'Values', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle' }
+                }}
+              />
+              <Tooltip 
+                formatter={(value: any, name: any) => [value, 'Value']}
+                labelFormatter={(label) => `Category: ${label}`}
+              />
+              {chartData.style.legend?.display && (
+                <Legend verticalAlign="top" height={36} />
+              )}
+              <Scatter 
+                data={chartDataForRecharts} 
+                fill={colors[0]}
+                shape="circle"
+              />
+            </ScatterChart>
+          </ResponsiveContainer>
+        );
+
       default:
-        return renderBarChart();
+        return (
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={chartDataForRecharts}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="name" 
+                label={{ 
+                  value: chartData.style.axis?.x?.title || 'Categories', 
+                  position: 'bottom',
+                  offset: 0
+                }}
+              />
+              <YAxis 
+                label={{ 
+                  value: chartData.style.axis?.y?.title || 'Values', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle' }
+                }}
+              />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="value" fill={colors[0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        );
     }
   };
 
-  const renderBarChart = () => {
-    const maxValue = Math.max(...chartData.data.map((item: any) => item.value || 0));
-    
-    return (
-      <div className="h-64 flex items-end justify-center space-x-2 p-4">
-        {chartData.data.map((item: any, index: number) => (
-          <div key={index} className="flex flex-col items-center">
-            <div
-              className="bg-indigo-600 rounded-t"
-              style={{
-                width: '40px',
-                height: `${((item.value || 0) / maxValue) * 200}px`,
-                backgroundColor: chartData.style.colors[index % chartData.style.colors.length]
-              }}
-            />
-            <div className="text-xs text-gray-600 mt-1 text-center">
-              {item.label || item.name}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const renderLineChart = () => {
-    return (
-      <div className="h-64 flex items-center justify-center p-4">
-        <svg width="100%" height="100%" viewBox="0 0 400 200">
-          <polyline
-            fill="none"
-            stroke={chartData.style.colors[0]}
-            strokeWidth="2"
-            points={chartData.data.map((item: any, index: number) => 
-              `${(index / (chartData.data.length - 1)) * 350 + 25},${200 - (item.value || 0) * 2}`
-            ).join(' ')}
-          />
-          {chartData.data.map((item: any, index: number) => (
-            <circle
-              key={index}
-              cx={(index / (chartData.data.length - 1)) * 350 + 25}
-              cy={200 - (item.value || 0) * 2}
-              r="3"
-              fill={chartData.style.colors[0]}
-            />
-          ))}
-        </svg>
-      </div>
-    );
-  };
-
-  const renderPieChart = () => {
-    const total = chartData.data.reduce((sum: number, item: any) => sum + (item.value || 0), 0);
-    let currentAngle = 0;
-    
-    return (
-      <div className="h-64 flex items-center justify-center p-4">
-        <svg width="200" height="200" viewBox="0 0 200 200">
-          {chartData.data.map((item: any, index: number) => {
-            const percentage = (item.value || 0) / total;
-            const angle = percentage * 360;
-            const x1 = 100 + 80 * Math.cos(currentAngle * Math.PI / 180);
-            const y1 = 100 + 80 * Math.sin(currentAngle * Math.PI / 180);
-            const x2 = 100 + 80 * Math.cos((currentAngle + angle) * Math.PI / 180);
-            const y2 = 100 + 80 * Math.sin((currentAngle + angle) * Math.PI / 180);
-            
-            const largeArcFlag = angle > 180 ? 1 : 0;
-            
-            const pathData = [
-              `M 100 100`,
-              `L ${x1} ${y1}`,
-              `A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-              'Z'
-            ].join(' ');
-            
-            currentAngle += angle;
-            
-            return (
-              <path
-                key={index}
-                d={pathData}
-                fill={chartData.style.colors[index % chartData.style.colors.length]}
-                stroke="white"
-                strokeWidth="2"
-              />
-            );
-          })}
-        </svg>
-      </div>
-    );
-  };
-
-  const renderScatterChart = () => {
-    return (
-      <div className="h-64 flex items-center justify-center p-4">
-        <svg width="100%" height="100%" viewBox="0 0 400 200">
-          {chartData.data.map((item: any, index: number) => (
-            <circle
-              key={index}
-              cx={(item.x || index) * 10 + 25}
-              cy={200 - (item.y || item.value || 0) * 2}
-              r="4"
-              fill={chartData.style.colors[index % chartData.style.colors.length]}
-            />
-          ))}
-        </svg>
-      </div>
-    );
-  };
-
-  const renderAreaChart = () => {
-    const points = chartData.data.map((item: any, index: number) => 
-      `${(index / (chartData.data.length - 1)) * 350 + 25},${200 - (item.value || 0) * 2}`
-    );
-    
-    const areaPath = `M ${points.join(' L ')} L ${points[points.length - 1].split(',')[0]},200 L ${points[0].split(',')[0]},200 Z`;
-    
-    return (
-      <div className="h-64 flex items-center justify-center p-4">
-        <svg width="100%" height="100%" viewBox="0 0 400 200">
-          <path
-            d={areaPath}
-            fill={chartData.style.colors[0]}
-            fillOpacity="0.3"
-            stroke={chartData.style.colors[0]}
-            strokeWidth="2"
-          />
-          {chartData.data.map((item: any, index: number) => (
-            <circle
-              key={index}
-              cx={(index / (chartData.data.length - 1)) * 350 + 25}
-              cy={200 - (item.value || 0) * 2}
-              r="3"
-              fill={chartData.style.colors[0]}
-            />
-          ))}
-        </svg>
-      </div>
-    );
-  };
-
   const renderSQL = () => {
+    const handleSQLSubmit = async () => {
+      if (!editableSQL.trim()) return;
+      
+      setIsExecuting(true);
+      try {
+        // Call the backend API to re-execute the SQL
+        const response = await apiService.executeSQL({
+          sql: editableSQL,
+          dataset: chartData.dataset,
+          workspace: window.location.pathname.split('/')[2] // Extract workspace ID from URL
+        });
+        
+        // Transform the raw data into the format expected by the chart
+        let transformedData = response.data;
+        if (Array.isArray(transformedData) && transformedData.length > 0) {
+          // Try to find label and value columns, or use the first two columns
+          const firstRow = transformedData[0];
+          const columns = Object.keys(firstRow);
+          
+          if (columns.length >= 2) {
+            // Use the first two columns as label and value
+            transformedData = transformedData.map((row: any) => ({
+              label: row[columns[0]] || 'Unknown',
+              value: parseFloat(row[columns[1]]) || 0
+            }));
+          }
+        }
+        
+        // Update the chart with new data
+        onChartUpdate({
+          sql: editableSQL,
+          data: transformedData || chartData.data
+        });
+        
+        setIsEditing(false);
+        
+        // Show success message
+        alert('SQL executed successfully! Chart updated with new data.');
+      } catch (error) {
+        console.error('Error executing SQL:', error);
+        alert('Failed to execute SQL. Please check your query and try again.');
+      } finally {
+        setIsExecuting(false);
+      }
+    };
+
     return (
       <div className="p-4">
-        <div className="bg-gray-900 text-green-400 p-4 rounded-md font-mono text-sm overflow-x-auto">
-          <pre>{chartData.sql}</pre>
+        <div className="mb-4 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">Generated SQL Query</h3>
+          <div className="flex space-x-2">
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                Edit SQL
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setEditableSQL(chartData.sql);
+                    setIsEditing(false);
+                  }}
+                  className="px-3 py-1 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSQLSubmit}
+                  disabled={isExecuting}
+                  className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                >
+                  {isExecuting ? 'Executing...' : 'Execute'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
+        
+        {isEditing ? (
+          <div className="space-y-4">
+            <textarea
+              value={editableSQL}
+              onChange={(e) => setEditableSQL(e.target.value)}
+              className="w-full h-32 p-3 border border-gray-300 rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Enter your SQL query..."
+            />
+            <p className="text-sm text-gray-600">
+              Edit the SQL query above and click Execute to run it against your dataset.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-gray-900 text-green-400 p-4 rounded-md font-mono text-sm overflow-x-auto">
+            <pre>{chartData.sql}</pre>
+          </div>
+        )}
       </div>
     );
   };
@@ -298,7 +490,11 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate 
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'chart' && renderChart()}
+        {activeTab === 'chart' && (
+          <div className="p-4">
+            {renderChart()}
+          </div>
+        )}
         {activeTab === 'sql' && renderSQL()}
         {activeTab === 'data' && renderData()}
       </div>

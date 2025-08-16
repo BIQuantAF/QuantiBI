@@ -130,6 +130,10 @@ const CreateChart: React.FC = () => {
         value: aiResponse.data.datasets[0].data[index]
       }));
 
+      console.log('AI Response:', aiResponse);
+      console.log('Transformed Data:', transformedData);
+      console.log('Chart Type:', aiResponse.chartType);
+
       // Create chart data
       const newChartData: ChartData = {
         name: '',
@@ -142,7 +146,7 @@ const CreateChart: React.FC = () => {
           colors: ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'],
           backgroundColor: '#FFFFFF',
           title: {
-            text: '',
+            text: `Chart: ${userQuery}`,
             display: true,
             position: 'top'
           },
@@ -152,11 +156,11 @@ const CreateChart: React.FC = () => {
           },
           axis: {
             x: {
-              title: '',
+              title: 'Categories',
               display: true
             },
             y: {
-              title: '',
+              title: 'Values',
               display: true
             }
           }

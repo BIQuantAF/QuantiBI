@@ -210,21 +210,38 @@ const AIChat: React.FC<AIChatProps> = ({ initialQuery, chartData, onChartUpdate,
 
   const handleNewQuery = async (message: string): Promise<string> => {
     try {
+      // Build conversation context for the AI
+      const conversationContext = messages
+        .filter(msg => msg.type === 'user')
+        .map(msg => msg.content)
+        .join('. ');
+      
+      // Combine context with the new message
+      const contextualizedQuery = conversationContext 
+        ? `${conversationContext}. ${message}` 
+        : message;
+
       const aiResponse = await apiService.generateChartWithAI(workspaceId, {
-        query: message,
+        query: contextualizedQuery,
         dataset: chartData.dataset,
         workspace: workspaceId
       });
 
+      // Transform data from Chart.js format to the format expected by ChartRenderer
+      const transformedData = aiResponse.data.labels.map((label: string, index: number) => ({
+        label: label,
+        value: aiResponse.data.datasets[0].data[index]
+      }));
+
       // Update the chart with new data
       onChartUpdate({
-        query: message,
+        query: contextualizedQuery,
         sql: aiResponse.sql,
-        data: aiResponse.data,
+        data: transformedData,
         type: aiResponse.chartType
       });
 
-      return `I've updated the chart based on your query: "${message}". The chart now shows the new data with a ${aiResponse.chartType} visualization.`;
+      return `I've updated the chart based on your query: "${message}". The chart now shows the new data with a ${aiResponse.chartType} visualization. I considered the context from our previous conversation to provide a more accurate response.`;
     } catch (error) {
       return "I'm sorry, I couldn't process your query. Please make sure your request is clear and try again.";
     }
@@ -241,7 +258,12 @@ const AIChat: React.FC<AIChatProps> = ({ initialQuery, chartData, onChartUpdate,
     <div className="h-full flex flex-col">
       <div className="p-4 border-b">
         <h3 className="text-lg font-medium text-gray-900">AI Assistant</h3>
-        <p className="text-sm text-gray-500">Ask me to modify your chart or create new queries</p>
+        <p className="text-sm text-gray-500">
+          Ask me to modify your chart or create new queries. I'll remember our conversation context.
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          Example: "show me sales in kentucky for 2016" then "actually change to 2017" - I'll understand you mean 2017 for Kentucky.
+        </p>
       </div>
 
       {/* Messages */}

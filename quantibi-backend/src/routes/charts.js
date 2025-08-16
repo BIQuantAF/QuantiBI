@@ -8,6 +8,7 @@ const OpenAI = require('openai');
 const xlsx = require('xlsx');
 const fs = require('fs');
 const Database = require('../models/Database');
+const csv = require('csv-parse/sync'); // Added for CSV parsing
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -808,6 +809,60 @@ Help modify the chart based on the user's request by providing:
       error: error.message,
       details: error.stack 
     });
+  }
+});
+
+/**
+ * @route   POST /api/workspaces/:workspaceId/charts/execute-sql
+ * @desc    Execute a custom SQL query against a dataset
+ * @access  Private
+ */
+router.post('/execute-sql', async (req, res) => {
+  try {
+    const { sql, dataset } = req.body;
+    const { workspaceId } = req.params;
+    
+    if (!sql || !dataset || !workspaceId) {
+      return res.status(400).json({ error: 'Missing required fields: sql, dataset, workspaceId' });
+    }
+
+    // Find the dataset
+    const datasetDoc = await Dataset.findOne({ _id: dataset, workspace: workspaceId });
+    if (!datasetDoc) {
+      return res.status(404).json({ error: 'Dataset not found' });
+    }
+
+    // For file-based datasets, we'll need to read the file and apply the SQL
+    if (datasetDoc.type === 'XLS' || datasetDoc.type === 'CSV') {
+      if (!datasetDoc.filePath) {
+        return res.status(400).json({ error: 'Dataset file not found' });
+      }
+
+      // Read the file data
+      let data;
+      if (datasetDoc.type === 'XLS') {
+        const workbook = xlsx.readFile(datasetDoc.filePath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        data = xlsx.utils.sheet_to_json(worksheet);
+      } else if (datasetDoc.type === 'CSV') {
+        const fileContent = fs.readFileSync(datasetDoc.filePath, 'utf8');
+        data = csv.parse(fileContent, { columns: true });
+      }
+
+      // For now, we'll return the data as-is since implementing a full SQL parser is complex
+      // In a production environment, you'd want to use a proper SQL execution engine
+      res.json({ 
+        data: data,
+        message: 'SQL execution is currently limited to file reading. Full SQL parsing will be implemented in future versions.'
+      });
+    } else {
+      // For database connections, you could execute the SQL directly
+      res.status(400).json({ error: 'SQL execution for database connections not yet implemented' });
+    }
+  } catch (error) {
+    console.error('Error executing SQL:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

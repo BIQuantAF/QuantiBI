@@ -206,6 +206,15 @@ class ApiService {
     });
     return response.data;
   }
+
+  // Execute custom SQL query
+  async executeSQL(params: { sql: string; dataset: string; workspace: string }): Promise<any> {
+    const response = await this.api.post(`/workspaces/${params.workspace}/charts/execute-sql`, {
+      sql: params.sql,
+      dataset: params.dataset
+    });
+    return response.data;
+  }
 }
 
 export const apiService = new ApiService();
