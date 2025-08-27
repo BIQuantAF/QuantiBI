@@ -100,7 +100,7 @@ const SignUp: React.FC = () => {
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Start your QuantiBI journey
+            Start your QuantiBI journey for free
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -235,6 +235,11 @@ const SignUp: React.FC = () => {
               </Link>
             </div>
           </div>
+          <div>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Looking to join an existing team? You'll need an invite from a team administrator.
+          </p>
+        </div>
         </form>
       </div>
     </div>
