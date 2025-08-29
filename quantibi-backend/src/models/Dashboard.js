@@ -6,6 +6,11 @@ const DashboardSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  description: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   workspace: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Workspace',

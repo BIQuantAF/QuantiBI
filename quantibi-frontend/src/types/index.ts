@@ -180,6 +180,7 @@ export interface ChartCreationForm {
   type: Chart['type'];
   dataset: string;
   query: string;
+  data: any;
   style?: ChartStyle;
 }
 

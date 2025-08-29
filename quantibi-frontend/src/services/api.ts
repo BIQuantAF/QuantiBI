@@ -14,6 +14,9 @@ import {
 } from '../types';
 
 class ApiService {
+  async removeChartFromDashboard(workspaceId: string, dashboardId: string, chartId: string): Promise<void> {
+    await this.api.delete(`/workspaces/${workspaceId}/dashboards/${dashboardId}/charts/${chartId}`);
+  }
   private api: AxiosInstance;
 
   constructor() {
@@ -175,6 +178,10 @@ class ApiService {
   }
 
   // Dashboard APIs
+
+  async addChartToDashboard(workspaceId: string, dashboardId: string, chartId: string): Promise<void> {
+    await this.api.post(`/workspaces/${workspaceId}/dashboards/${dashboardId}/charts`, { chartId });
+  }
   async getDashboards(workspaceId: string): Promise<Dashboard[]> {
     const response = await this.api.get(`/workspaces/${workspaceId}/dashboards`);
     return response.data;

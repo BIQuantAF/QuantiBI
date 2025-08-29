@@ -51,22 +51,32 @@ const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId,
     setError(null);
 
     try {
+      let dashboardId = selectedDashboard;
       // Create new dashboard if requested
       if (showNewDashboardForm && newDashboardName.trim()) {
-        await apiService.createDashboard(workspaceId, {
+        const newDashboard = await apiService.createDashboard(workspaceId, {
           name: newDashboardName.trim(),
           description: `Dashboard created for chart: ${chartName}`
         });
+        dashboardId = newDashboard._id;
+        // Reload dashboards so the new one appears in the list
+        await loadDashboards();
       }
 
       // Save the chart
-      await apiService.createChart(workspaceId, {
+      const createdChart = await apiService.createChart(workspaceId, {
         name: chartName.trim(),
         type: chartData.type,
         dataset: chartData.dataset,
         query: chartData.query,
+        data: chartData.data,
         style: chartData.style
       });
+
+      // If a dashboard is selected or was just created, add the chart to it
+      if (dashboardId) {
+        await apiService.addChartToDashboard(workspaceId, dashboardId, createdChart._id);
+      }
 
       onSave();
     } catch (err) {

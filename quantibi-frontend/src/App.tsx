@@ -9,6 +9,7 @@ import Datasets from './components/datasets/Datasets';
 import Charts from './components/charts/Charts';
 import CreateChart from './components/charts/CreateChart';
 import Dashboards from './components/dashboards/Dashboards';
+import DashboardView from './components/dashboards/DashboardView';
 import WorkspaceSettings from './components/workspace/WorkspaceSettings';
 import Navigation from './components/common/Navigation';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -79,6 +80,14 @@ const App: React.FC = () => {
                   <div>
                     <Navigation />
                     <Dashboards />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/workspace/:workspaceId/dashboards/:dashboardId" element={
+                <ProtectedRoute>
+                  <div>
+                    <Navigation />
+                    <DashboardView />
                   </div>
                 </ProtectedRoute>
               } />
