@@ -13,7 +13,6 @@ const DashboardView: React.FC = () => {
   const [charts, setCharts] = useState<Chart[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAddChart, setShowAddChart] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [allCharts, setAllCharts] = useState<Chart[]>([]);
   const [layout, setLayout] = useState<any[]>([]);
@@ -57,7 +56,7 @@ const DashboardView: React.FC = () => {
         setAllCharts(all);
   setCharts(all.filter(chart => found.charts.some((c: any) => c._id === chart._id)));
       }
-      setShowAddChart(false);
+  // Removed setShowAddChart(false); (no longer needed)
     } catch {
       setError('Failed to add chart');
     } finally {
@@ -130,12 +129,7 @@ const DashboardView: React.FC = () => {
           {charts.length === 0 ? (
             <div className="bg-white rounded-lg shadow p-6 flex flex-col items-center">
               <p className="text-gray-600 mb-4">No charts in this dashboard.</p>
-              <button
-                className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-                onClick={() => setShowAddChart(true)}
-              >
-                + Add Chart
-              </button>
+              {/* Removed Add Chart button since modal is not used */}
             </div>
           ) : (
             <GridLayout
