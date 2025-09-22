@@ -5,7 +5,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 
 const Navigation: React.FC = () => {
   const { logout, currentUser } = useAuth();
-  const { currentWorkspace } = useWorkspace();
+  const { currentWorkspace, clearWorkspace } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -38,22 +38,51 @@ const Navigation: React.FC = () => {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link to="/workspaces" className="text-xl font-bold text-indigo-600">
+              <Link
+                to={location.pathname === '/workspaces' ? '/workspaces' : (currentWorkspace ? `/workspace/${currentWorkspace._id}` : '/workspaces')}
+                className="text-xl font-bold text-indigo-600"
+              >
                 QuantiBI
               </Link>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <Link
-                to="/workspaces"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  isActive('/workspaces') && !currentWorkspace
-                    ? 'border-indigo-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                Home
-              </Link>
-              {currentWorkspace && (
+              {location.pathname === '/workspaces' ? (
+                <Link
+                  to="/workspaces"
+                  onClick={() => clearWorkspace()}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/workspaces')
+                      ? 'border-indigo-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Home
+                </Link>
+              ) : currentWorkspace ? (
+                <Link
+                  to={`/workspace/${currentWorkspace._id}`}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/workspace')
+                      ? 'border-indigo-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Home
+                </Link>
+              ) : (
+                <Link
+                  to="/workspaces"
+                  onClick={() => clearWorkspace()}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/workspaces')
+                      ? 'border-indigo-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  Home
+                </Link>
+              )}
+              {currentWorkspace && location.pathname !== '/workspaces' && (
                 <>
                   <Link
                     to={getWorkspacePath('/dashboards')}
@@ -96,12 +125,21 @@ const Navigation: React.FC = () => {
               </div>
             )}
             {currentWorkspace && (
-              <button
-                onClick={handleSettings}
-                className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Settings
-              </button>
+              <>
+                <button
+                  onClick={handleSettings}
+                  className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Settings
+                </button>
+                <button
+                  onClick={() => { clearWorkspace(); navigate('/workspaces'); }}
+                  className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  style={{ marginLeft: '8px' }}
+                >
+                  Workspaces
+                </button>
+              </>
             )}
             <button
               onClick={handleLogout}

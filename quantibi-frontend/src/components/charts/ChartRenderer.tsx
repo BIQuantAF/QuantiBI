@@ -20,9 +20,10 @@ interface ChartData {
 interface ChartRendererProps {
   chartData: ChartData;
   onChartUpdate: (updates: Partial<ChartData>) => void;
+  minimal?: boolean;
 }
 
-const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate }) => {
+const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate, minimal = false }) => {
   const [activeTab, setActiveTab] = useState<'chart' | 'sql' | 'data'>('chart');
   const [editableSQL, setEditableSQL] = useState(chartData.sql);
   const [isEditing, setIsEditing] = useState(false);
@@ -432,6 +433,22 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate 
     );
   };
 
+  if (minimal) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="p-2 pb-0">
+          <h2 className="text-lg font-semibold text-gray-900 text-center truncate">{chartData.name}</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-full h-full">
+            {renderChart()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ...existing code for full mode...
   return (
     <div className="h-full flex flex-col">
       {/* Chart Title */}
@@ -451,7 +468,6 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate 
           />
         </div>
       )}
-
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8 px-4">
@@ -487,7 +503,6 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate 
           </button>
         </nav>
       </div>
-
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {activeTab === 'chart' && (

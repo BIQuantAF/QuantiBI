@@ -9,6 +9,7 @@ interface WorkspaceContextType {
   error: string | null;
   createWorkspace: (workspaceData: CreateWorkspaceForm) => Promise<Workspace>;
   selectWorkspace: (workspaceId: string) => void;
+  clearWorkspace: () => void;
   fetchWorkspaces: () => Promise<void>;
   clearError: () => void;
 }
@@ -28,6 +29,9 @@ interface WorkspaceProviderProps {
 }
 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
+  const clearWorkspace = (): void => {
+    setCurrentWorkspace(null);
+  };
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(false);
@@ -106,6 +110,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     error,
     createWorkspace,
     selectWorkspace,
+    clearWorkspace,
     fetchWorkspaces,
     clearError,
   };
