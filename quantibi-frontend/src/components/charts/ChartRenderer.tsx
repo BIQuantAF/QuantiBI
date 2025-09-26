@@ -21,9 +21,10 @@ interface ChartRendererProps {
   chartData: ChartData;
   onChartUpdate: (updates: Partial<ChartData>) => void;
   minimal?: boolean;
+  containerHeight?: number | string;
 }
 
-const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate, minimal = false }) => {
+const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate, minimal = false, containerHeight }) => {
   const [activeTab, setActiveTab] = useState<'chart' | 'sql' | 'data'>('chart');
   const [editableSQL, setEditableSQL] = useState(chartData.sql);
   const [isEditing, setIsEditing] = useState(false);
@@ -52,10 +53,11 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
 
     const colors = chartData.style.colors || ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'];
 
+    const height = typeof containerHeight !== 'undefined' ? containerHeight : 400;
     switch (chartData.type) {
       case 'bar':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={height}>
             <BarChart data={chartDataForRecharts}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
@@ -67,7 +69,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
                 label={{ 
                   value: chartData.style.axis?.x?.title || 'Categories', 
                   position: 'bottom',
-                  offset: 0
+                  offset: 20 // Add offset to prevent cutoff
                 }}
               />
               <YAxis 
@@ -97,7 +99,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
 
       case 'line':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={height}>
             <LineChart data={chartDataForRecharts}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
@@ -109,7 +111,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
                 label={{ 
                   value: chartData.style.axis?.x?.title || 'Categories', 
                   position: 'bottom',
-                  offset: 0
+                  offset: 20 // Add offset to prevent cutoff
                 }}
               />
               <YAxis 

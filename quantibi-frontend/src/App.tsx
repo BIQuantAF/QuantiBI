@@ -12,6 +12,7 @@ import Dashboards from './components/dashboards/Dashboards';
 import DashboardView from './components/dashboards/DashboardView';
 import WorkspaceSettings from './components/workspace/WorkspaceSettings';
 import Navigation from './components/common/Navigation';
+import EditChart from './components/charts/EditChart';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
@@ -72,6 +73,14 @@ const App: React.FC = () => {
                   <div>
                     <Navigation />
                     <CreateChart />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/workspace/:workspaceId/charts/:chartId/edit" element={
+                <ProtectedRoute>
+                  <div>
+                    <Navigation />
+                    <EditChart />
                   </div>
                 </ProtectedRoute>
               } />

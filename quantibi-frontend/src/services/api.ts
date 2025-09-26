@@ -157,6 +157,11 @@ class ApiService {
     return response.data;
   }
 
+  async getChart(workspaceId: string, chartId: string): Promise<Chart> {
+    const response = await this.api.get(`/workspaces/${workspaceId}/charts/${chartId}`);
+    return response.data;
+  }
+
   async createChart(workspaceId: string, chartData: ChartCreationForm): Promise<Chart> {
     const response = await this.api.post(`/workspaces/${workspaceId}/charts`, chartData);
     return response.data;

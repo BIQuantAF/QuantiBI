@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
@@ -9,6 +10,39 @@ const xlsx = require('xlsx');
 const fs = require('fs');
 const Database = require('../models/Database');
 const csv = require('csv-parse/sync'); // Added for CSV parsing
+
+/**
+ * @route   GET /api/workspaces/:workspaceId/charts/:chartId
+ * @desc    Get a single chart by ID for a workspace
+ * @access  Private
+ */
+router.get('/:workspaceId/charts/:chartId', authenticateUser, async (req, res) => {
+  try {
+    const workspace = await Workspace.findById(req.params.workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const chart = await Chart.findOne({
+      _id: req.params.chartId,
+      workspace: workspace._id
+    });
+    if (!chart) {
+      return res.status(404).json({ message: 'Chart not found' });
+    }
+    res.json(chart);
+  } catch (error) {
+    console.error('Error fetching chart:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 // Initialize OpenAI
 const openai = new OpenAI({

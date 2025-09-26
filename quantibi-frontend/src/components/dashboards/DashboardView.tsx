@@ -110,7 +110,7 @@ const DashboardView: React.FC = () => {
   return (
     <div className="relative p-0 min-h-screen bg-gray-50">
       {/* Dashboard Top Bar */}
-  <div className="w-full bg-white shadow flex items-center justify-between px-6 py-4" style={{ minHeight: 64, marginTop: '64px' }}>
+  <div className="w-full bg-white shadow flex items-center justify-between px-6 py-4" style={{ minHeight: 64 }}>
         <div>
           <button className="text-indigo-600 hover:underline mr-4" onClick={() => navigate(-1)}>&larr; Back</button>
           <span className="text-2xl font-bold text-gray-900 align-middle">{dashboard.name}</span>

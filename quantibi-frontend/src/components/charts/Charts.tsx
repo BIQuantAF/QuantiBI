@@ -138,52 +138,56 @@ const Charts: React.FC = () => {
         </div>
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {charts.map((chart) => (
-              <li key={chart._id} className="px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-sm font-medium text-gray-900 truncate">{chart.name}</h3>
-                        <div className="mt-1 flex items-center text-sm text-gray-500 space-x-4">
-                          <span className="capitalize">{chart.type}</span>
-                          <span>•</span>
-                          <span>{getDatasetName(chart.dataset)}</span>
-                          <span>•</span>
-                          <span>{getDashboardNames(chart)}</span>
-                          <span>•</span>
-                          <span>Owner: {chart.owner === currentUser?.uid ? 'You' : 'Unknown'}</span>
-                          <span>•</span>
-                          <span>Modified: {formatDate(chart.lastModified)}</span>
-                        </div>
-                      </div>
-                      <div className="ml-4 flex items-center space-x-2">
-                        <button
-                          onClick={() => handleEditChart(chart._id)}
-                          className="px-3 py-1 text-sm text-indigo-600 hover:text-indigo-900 focus:outline-none"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleExportChart(chart)}
-                          className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900 focus:outline-none"
-                        >
-                          Export
-                        </button>
-                        <button
-                          onClick={() => handleDeleteChart(chart._id)}
-                          className="px-3 py-1 text-sm text-red-600 hover:text-red-900 focus:outline-none"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dataset</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dashboards</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Modified</th>
+                <th className="px-6 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {charts.map((chart) => (
+                <tr key={chart._id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      className="text-indigo-600 hover:underline font-medium"
+                      onClick={() => handleEditChart(chart._id)}
+                    >
+                      {chart.name}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap capitalize">{chart.type}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{getDatasetName(chart.dataset)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{getDashboardNames(chart)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{formatDate(chart.lastModified)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right flex space-x-2">
+                    <button
+                      onClick={() => handleEditChart(chart._id)}
+                      className="px-3 py-1 text-sm text-indigo-600 hover:text-indigo-900 focus:outline-none"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleExportChart(chart)}
+                      className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900 focus:outline-none"
+                    >
+                      Export
+                    </button>
+                    <button
+                      onClick={() => handleDeleteChart(chart._id)}
+                      className="px-3 py-1 text-sm text-red-600 hover:text-red-900 focus:outline-none"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

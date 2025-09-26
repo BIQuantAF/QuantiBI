@@ -21,6 +21,9 @@ interface SaveChartModalProps {
 
 const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId, onClose, onSave }) => {
   const [chartName, setChartName] = useState(chartData.name || '');
+  useEffect(() => {
+    setChartName(chartData.name || '');
+  }, [chartData.name]);
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [selectedDashboard, setSelectedDashboard] = useState<string>('');
   const [newDashboardName, setNewDashboardName] = useState('');
