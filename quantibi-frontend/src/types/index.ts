@@ -161,7 +161,7 @@ export interface CreateWorkspaceForm {
 export interface DatabaseConnectionForm {
   type: Database['type'];
   name: string;
-  displayName: string;
+  displayName?: string;
   host?: string;
   port?: number;
   databaseName?: string;

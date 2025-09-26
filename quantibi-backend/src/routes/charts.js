@@ -9,6 +9,7 @@ const OpenAI = require('openai');
 const xlsx = require('xlsx');
 const fs = require('fs');
 const Database = require('../models/Database');
+const bigqueryService = require('../services/bigquery');
 const csv = require('csv-parse/sync'); // Added for CSV parsing
 
 /**
@@ -232,14 +233,14 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
       _id: dataset,
       workspace: workspace._id
     }).populate('database');
-    
+
     console.log('Dataset object:', {
       id: datasetObj?._id,
       name: datasetObj?.name,
       databaseType: datasetObj?.database?.type,
       filePath: datasetObj?.database?.filePath
     });
-    
+
     if (!datasetObj) {
       return res.status(404).json({ message: 'Dataset not found' });
     }
@@ -257,9 +258,41 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
         port: datasetObj.database.port,
         databaseName: datasetObj.database.databaseName,
         username: datasetObj.database.username,
-        password: datasetObj.database.password
+        password: datasetObj.database.password,
+        projectId: datasetObj.database.projectId,
+        credentials: datasetObj.database.credentials
       }
     }];
+
+    // For BigQuery, run the query and get data
+    if (datasetObj.database.type === 'Google BigQuery') {
+      try {
+        const bigquery = bigqueryService.createBigQueryClient(datasetObj.database.projectId, datasetObj.database.credentials);
+        // For demo, just get the first 100 rows from the first table in the dataset
+        // You may want to use aiResponse.dataQuery to build a more specific query
+        const [tables] = await bigquery.dataset(datasetObj.name).getTables();
+        if (!tables || tables.length === 0) {
+          return res.status(404).json({ message: 'No tables found in BigQuery dataset' });
+        }
+        const table = tables[0];
+        const [rows] = await table.getRows({ maxResults: 100 });
+        // Use the first row's keys as columns
+        const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+        datasetDetails[0].database = {
+          ...datasetDetails[0].database,
+          columns,
+          sampleData: rows.slice(0, 5),
+          totalRows: rows.length
+        };
+        console.log('BigQuery data loaded:', {
+          rowCount: rows.length,
+          columns
+        });
+      } catch (error) {
+        console.error('Error querying BigQuery:', error);
+        return res.status(500).json({ message: 'Error querying BigQuery', error: error.message });
+      }
+    }
 
     // For Excel files, read the data and column information
     if (datasetObj.database.type === 'XLS') {

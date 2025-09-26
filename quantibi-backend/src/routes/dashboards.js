@@ -14,6 +14,48 @@ router.get('/:workspaceId/dashboards', authenticateUser, async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
+router.delete('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (req, res) => {
+  try {
+    const { workspaceId, dashboardId } = req.params;
+    console.log(`[DELETE] Dashboard: workspaceId=${workspaceId}, dashboardId=${dashboardId}, user=${req.user.uid}`);
+    const workspace = await Workspace.findById(workspaceId);
+    if (!workspace) {
+      console.error(`[DELETE] Workspace not found: ${workspaceId}`);
+      return res.status(404).json({ message: 'Workspace not found', workspaceId });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    if (!isMember) {
+      console.error(`[DELETE] Access denied for user ${req.user.uid} in workspace ${workspaceId}`);
+      return res.status(403).json({ message: 'Access denied', workspaceId, user: req.user.uid });
+    }
+
+    const dashboard = await Dashboard.findOneAndDelete({
+      _id: dashboardId,
+      workspace: workspace._id
+    });
+
+    if (!dashboard) {
+      console.error(`[DELETE] Dashboard not found: dashboardId=${dashboardId}, workspaceId=${workspaceId}`);
+      // Try to find dashboard for more info
+      const debugDash = await Dashboard.findOne({ _id: dashboardId });
+      if (debugDash) {
+        console.error(`[DELETE] Dashboard exists but workspace mismatch: dashboard.workspace=${debugDash.workspace}`);
+      } else {
+        console.error(`[DELETE] Dashboard does not exist at all: dashboardId=${dashboardId}`);
+      }
+      return res.status(404).json({ message: 'Dashboard not found', dashboardId, workspaceId });
+    }
+
+    console.log(`[DELETE] Dashboard deleted: dashboardId=${dashboardId}, workspaceId=${workspaceId}`);
+    res.json({ message: 'Dashboard deleted successfully', dashboardId, workspaceId });
+  } catch (error) {
+    console.error('Error deleting dashboard:', error);
+    res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
+  }
+});
       return res.status(404).json({ message: 'Workspace not found' });
     }
 

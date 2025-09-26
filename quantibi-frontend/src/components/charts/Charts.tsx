@@ -151,7 +151,7 @@ const Charts: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {charts.map((chart) => (
                 <tr key={chart._id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 text-left align-middle">
                     <button
                       className="text-indigo-600 hover:underline font-medium"
                       onClick={() => handleEditChart(chart._id)}
@@ -159,11 +159,11 @@ const Charts: React.FC = () => {
                       {chart.name}
                     </button>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap capitalize">{chart.type}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{getDatasetName(chart.dataset)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{getDashboardNames(chart)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{formatDate(chart.lastModified)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right flex space-x-2">
+                  <td className="px-6 py-4 text-left align-middle capitalize">{chart.type}</td>
+                  <td className="px-6 py-4 text-left align-middle">{getDatasetName(chart.dataset)}</td>
+                  <td className="px-6 py-4 text-left align-middle">{getDashboardNames(chart)}</td>
+                  <td className="px-6 py-4 text-left align-middle">{formatDate(chart.lastModified)}</td>
+                  <td className="px-6 py-4 text-left align-middle flex space-x-2">
                     <button
                       onClick={() => handleEditChart(chart._id)}
                       className="px-3 py-1 text-sm text-indigo-600 hover:text-indigo-900 focus:outline-none"

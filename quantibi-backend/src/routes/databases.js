@@ -1,3 +1,21 @@
+const bigqueryService = require('../services/bigquery');
+/**
+ * @route   POST /api/workspaces/:workspaceId/databases/test-bigquery
+ * @desc    Test Google BigQuery connection
+ * @access  Private
+ */
+router.post('/:workspaceId/databases/test-bigquery', authenticateUser, async (req, res) => {
+  try {
+    const { projectId, credentials } = req.body;
+    if (!projectId || !credentials) {
+      return res.status(400).json({ message: 'Missing projectId or credentials' });
+    }
+    const result = await bigqueryService.testBigQueryConnection(projectId, credentials);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
@@ -58,24 +76,28 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
     const {
       type,
       name,
-      displayName,
       host,
       port,
       databaseName,
       username,
       password,
       projectId,
-      datasetId,
       credentials,
       spreadsheetUrl,
       sheetName
     } = req.body;
 
     // Validate required fields based on type
-    if (!type || !name || !displayName) {
+    if (!type || !name) {
       return res.status(400).json({ 
         message: 'Missing required fields',
-        required: ['type', 'name', 'displayName']
+        required: ['type', 'name']
+      });
+    }
+    if (type === 'Google BigQuery' && !projectId) {
+      return res.status(400).json({
+        message: 'Project ID is required for Google BigQuery',
+        required: ['projectId']
       });
     }
 
@@ -97,19 +119,27 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
       console.log('No file uploaded - req.file is null');
     }
 
+    // Handle credentials from file upload for BigQuery
+    let finalCredentials = credentials;
+    if (type === 'Google BigQuery' && req.file && req.file.mimetype === 'application/json') {
+      try {
+        finalCredentials = fs.readFileSync(req.file.path, 'utf8');
+      } catch (err) {
+        return res.status(400).json({ message: 'Failed to read uploaded JSON credentials file.' });
+      }
+    }
+
     const database = new Database({
       workspace: workspace._id,
       type,
       name,
-      displayName,
       host,
       port: port ? parseInt(port) : undefined,
       databaseName,
       username,
       password,
       projectId,
-      datasetId,
-      credentials,
+      credentials: finalCredentials,
       spreadsheetUrl,
       sheetName,
       filePath,

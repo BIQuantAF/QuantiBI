@@ -20,11 +20,15 @@ interface SaveChartModalProps {
 }
 
 const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId, onClose, onSave }) => {
-  const [chartName, setChartName] = useState(chartData.name || '');
+  const [chartName, setChartName] = useState(chartData.style?.title?.text || chartData.name || '');
+
   useEffect(() => {
-    setChartName(chartData.name || '');
-  }, [chartData.name]);
-  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+    if (chartData.style?.title?.text) {
+      setChartName(chartData.style.title.text);
+    } else if (chartData.name) {
+      setChartName(chartData.name);
+    }
+  }, [chartData.style?.title?.text, chartData.name]);
   const [selectedDashboard, setSelectedDashboard] = useState<string>('');
   const [newDashboardName, setNewDashboardName] = useState('');
   const [showNewDashboardForm, setShowNewDashboardForm] = useState(false);
@@ -39,6 +43,7 @@ const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId,
       console.error('Error loading dashboards:', err);
     }
   }, [workspaceId]);
+    const [dashboards, setDashboards] = useState<Dashboard[]>([]);
 
   useEffect(() => {
     loadDashboards();
@@ -117,13 +122,14 @@ const SaveChartModal: React.FC<SaveChartModalProps> = ({ chartData, workspaceId,
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Chart Name *
             </label>
-            <input
-              type="text"
-              value={chartName}
-              onChange={(e) => setChartName(e.target.value)}
-              placeholder="Enter chart name..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+             <input
+               type="text"
+               value={chartName}
+               onChange={(e) => setChartName(e.target.value)}
+               placeholder="Enter chart name..."
+               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+               autoFocus
+             />
           </div>
 
           {/* Dashboard Selection */}

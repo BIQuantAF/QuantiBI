@@ -101,8 +101,8 @@ const EditChart: React.FC = () => {
   if (!chartData) return null;
 
   return (
-    <div className="p-6 h-screen flex flex-col">
-      <div className="flex justify-between items-center mb-4">
+    <div className="p-4 md:p-6 flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
         <h1 className="text-2xl font-bold text-gray-900">Edit Chart</h1>
         <div className="flex space-x-2">
           <button
@@ -119,9 +119,9 @@ const EditChart: React.FC = () => {
           </button>
         </div>
       </div>
-      <div className="flex-1 flex gap-4">
+      <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0">
         {/* Left Panel - AI Chat */}
-        <div className="w-80 bg-white rounded-lg shadow">
+        <div className="w-full md:w-80 bg-white rounded-lg shadow flex-shrink-0 overflow-auto max-h-[60vh] md:max-h-[calc(100vh-120px)]">
           <AIChat
             initialQuery={chartData.query}
             chartData={chartData}
@@ -130,14 +130,14 @@ const EditChart: React.FC = () => {
           />
         </div>
         {/* Center Panel - Chart Display */}
-        <div className="flex-1 bg-white rounded-lg shadow p-4">
+        <div className="flex-1 bg-white rounded-lg shadow p-4 overflow-auto max-h-[60vh] md:max-h-[calc(100vh-120px)]">
           <ChartRenderer
             chartData={chartData}
             onChartUpdate={handleChartUpdate}
           />
         </div>
         {/* Right Panel - Customization */}
-        <div className="w-80 bg-white rounded-lg shadow">
+        <div className="w-full md:w-80 bg-white rounded-lg shadow flex-shrink-0 overflow-auto max-h-[60vh] md:max-h-[calc(100vh-120px)]">
           <ChartCustomization
             chartData={chartData}
             onChartUpdate={handleChartUpdate}

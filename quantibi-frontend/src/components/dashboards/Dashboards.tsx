@@ -82,6 +82,7 @@ const Dashboards: React.FC = () => {
 
   const handleDeleteDashboard = async (dashboardId: string) => {
     if (!currentWorkspace) return;
+    if (!window.confirm('Are you sure you want to delete this dashboard? This action cannot be undone.')) return;
     setLoading(true);
     try {
       await apiService.deleteDashboard(currentWorkspace._id, dashboardId);
@@ -125,7 +126,7 @@ const Dashboards: React.FC = () => {
               <tbody>
                 {dashboards.map((dashboard) => (
                   <tr key={dashboard._id} className="border-t">
-                    <td className="py-2 font-medium">
+                    <td className="py-2 font-medium text-left align-middle">
                       <Link
                         to={`/workspace/${currentWorkspace?._id}/dashboards/${dashboard._id}`}
                         className="text-indigo-700 hover:underline"
@@ -133,29 +134,18 @@ const Dashboards: React.FC = () => {
                         {dashboard.name}
                       </Link>
                     </td>
-                    <td className="py-2">{dashboard.description}</td>
-                    <td className="py-2">{new Date(dashboard.updatedAt).toLocaleString()}</td>
-                    <td className="py-2 space-x-2">
+                    <td className="py-2 text-left align-middle">{dashboard.description}</td>
+                    <td className="py-2 text-left align-middle">{new Date(dashboard.updatedAt).toLocaleString()}</td>
+                    <td className="py-2 space-x-2 text-left align-middle">
                       <button
                         className="text-indigo-600 hover:underline"
                         onClick={() => handleEditDashboard(dashboard)}
                       >Edit</button>
                       <button
-                        className="text-blue-600 hover:underline"
-                        onClick={() => setManagingChartsDashboard(dashboard)}
-                      >Manage Charts</button>
-                      <button
                         className="text-red-600 hover:underline"
                         onClick={() => handleDeleteDashboard(dashboard._id)}
                       >Delete</button>
                     </td>
-      {/* Manage Charts Modal */}
-      {managingChartsDashboard && (
-        <DashboardEditor
-          dashboard={managingChartsDashboard}
-          onClose={() => setManagingChartsDashboard(null)}
-        />
-      )}
                   </tr>
                 ))}
               </tbody>

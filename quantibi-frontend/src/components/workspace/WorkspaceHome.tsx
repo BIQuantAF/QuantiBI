@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Database, Chart, Dashboard } from '../../types/index';
+import { apiService } from '../../services/api';
 import { useParams, Link } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,9 +10,38 @@ const WorkspaceHome: React.FC = () => {
   const { currentWorkspace, selectWorkspace } = useWorkspace();
   const { currentUser } = useAuth();
 
+
+  type ActivityItem = { type: string; name: string; date: string; _id?: string };
+
+  const [databases, setDatabases] = useState<Database[]>([]);
+  const [charts, setCharts] = useState<Chart[]>([]);
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+
   useEffect(() => {
     if (workspaceId && currentUser) {
       selectWorkspace(workspaceId);
+      // Fetch workspace data
+      (async () => {
+        try {
+          // Replace with your actual API service calls
+          const dbs = await apiService.getDatabases(workspaceId);
+          setDatabases(dbs);
+          const chs = await apiService.getCharts(workspaceId);
+          setCharts(chs);
+          const dshs = await apiService.getDashboards(workspaceId);
+          setDashboards(dshs);
+          // Example: recent activity could be last 5 created items
+          const activity: ActivityItem[] = [
+            ...dbs.map((db: Database) => ({ type: 'Database', name: db.name, date: db.createdAt, _id: db._id })),
+            ...chs.map((chart: Chart) => ({ type: 'Chart', name: chart.name, date: chart.lastModified, _id: chart._id })),
+            ...dshs.map((dash: Dashboard) => ({ type: 'Dashboard', name: dash.name, date: dash.createdAt, _id: dash._id }))
+          ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+          setRecentActivity(activity);
+        } catch (err) {
+          console.error('Error loading workspace data:', err);
+        }
+      })();
       console.log('🔍 Loading workspace:', workspaceId);
     }
   }, [workspaceId, currentUser, selectWorkspace]);
@@ -125,13 +156,36 @@ const WorkspaceHome: React.FC = () => {
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="text-center text-gray-500 py-8">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No recent activity</h3>
-            <p className="mt-1 text-sm text-gray-500">Get started by connecting a database or creating your first chart.</p>
-          </div>
+          {recentActivity.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No recent activity</h3>
+              <p className="mt-1 text-sm text-gray-500">Get started by connecting a database or creating your first chart.</p>
+            </div>
+          ) : (
+            <ul>
+              {recentActivity.map((item, idx) => (
+                <li key={idx} className="mb-2 flex justify-between items-center">
+                  <span className="font-medium text-gray-700">
+                    {item.type === 'Chart' ? (
+                      <Link to={`/workspace/${workspaceId}/charts/${item._id}/edit`} className="text-blue-600 hover:underline">
+                        {item.type}: {item.name}
+                      </Link>
+                    ) : item.type === 'Dashboard' ? (
+                      <Link to={`/workspace/${workspaceId}/dashboards/${item._id}/edit`} className="text-purple-600 hover:underline">
+                        {item.type}: {item.name}
+                      </Link>
+                    ) : (
+                      <span>{item.type}: {item.name}</span>
+                    )}
+                  </span>
+                  <span className="text-xs text-gray-500">{new Date(item.date).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -146,7 +200,7 @@ const WorkspaceHome: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Databases</p>
-              <p className="text-2xl font-semibold text-gray-900">0</p>
+              <p className="text-2xl font-semibold text-gray-900">{databases.length}</p>
             </div>
           </div>
         </div>
@@ -160,7 +214,7 @@ const WorkspaceHome: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Charts</p>
-              <p className="text-2xl font-semibold text-gray-900">0</p>
+              <p className="text-2xl font-semibold text-gray-900">{charts.length}</p>
             </div>
           </div>
         </div>
@@ -174,7 +228,7 @@ const WorkspaceHome: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Dashboards</p>
-              <p className="text-2xl font-semibold text-gray-900">0</p>
+              <p className="text-2xl font-semibold text-gray-900">{dashboards.length}</p>
             </div>
           </div>
         </div>

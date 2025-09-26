@@ -11,7 +11,8 @@ const Datasets: React.FC = () => {
   const [formData, setDatabaseConnectionForm] = useState<DatabaseConnectionForm>({
     type: 'PostgreSQL',
     name: '',
-    displayName: '',
+    credentials: '',
+    projectId: '',
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,6 +21,8 @@ const Datasets: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // Validation state for BigQuery form
+  const [errors, setErrors] = useState<{ [key: string]: string | undefined }>({});
 
   const fetchDatabases = useCallback(async () => {
     if (!currentWorkspace) return;
@@ -130,41 +133,65 @@ const Datasets: React.FC = () => {
 
       case 'Google BigQuery':
         return (
-          <>
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Project ID</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                Project ID
+                <span className="ml-2 text-xs text-gray-400" title="Find this in your Google Cloud Console.">?</span>
+              </label>
               <input
                 type="text"
                 name="projectId"
                 value={formData.projectId || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors?.projectId ? 'border-red-500' : 'border-gray-300'}`}
                 placeholder="your-project-id"
+                required
+                aria-describedby="projectIdHelp"
               />
+              <p id="projectIdHelp" className="mt-1 text-xs text-gray-500">Your Google Cloud project ID. Example: <code>my-gcp-project</code></p>
+              {errors?.projectId && <p className="text-xs text-red-500 mt-1">{errors.projectId}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Dataset ID</label>
-              <input
-                type="text"
-                name="datasetId"
-                value={formData.datasetId || ''}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="your_dataset"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Service Account Credentials (JSON)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                Service Account Credentials (JSON)
+                <span className="ml-2 text-xs text-gray-400" title="Upload or paste your Google Cloud service account JSON key.">?</span>
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="file"
+                  accept="application/json"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        setDatabaseConnectionForm(prev => ({
+                          ...prev,
+                          credentials: event.target?.result as string || ''
+                        }));
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                  className="px-2 py-1 border border-gray-300 rounded-md"
+                />
+                <span className="text-xs text-gray-500">or paste below</span>
+              </div>
               <textarea
                 name="credentials"
                 value={formData.credentials || ''}
                 onChange={handleChange}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                rows={6}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors?.credentials ? 'border-red-500' : 'border-gray-300'}`}
                 placeholder="Paste your service account JSON credentials"
+                required
+                aria-describedby="credentialsHelp"
               />
+              <p id="credentialsHelp" className="mt-1 text-xs text-gray-500">Get this from Google Cloud IAM &amp; Admin &rarr; Service Accounts &rarr; Create Key (JSON).</p>
+              {errors?.credentials && <p className="text-xs text-red-500 mt-1">{errors.credentials}</p>}
             </div>
-          </>
+          </div>
         );
 
       case 'Google Sheets':
@@ -242,6 +269,29 @@ const Datasets: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+    // Validation for BigQuery fields
+    if (selectedDatabaseType === 'Google BigQuery') {
+      if (name === 'projectId') {
+        setErrors(prev => ({ ...prev, projectId: value.trim() ? undefined : 'Project ID is required.' }));
+      }
+      if (name === 'datasetId') {
+        setErrors(prev => ({ ...prev, datasetId: value.trim() ? undefined : 'Dataset ID is required.' }));
+      }
+      if (name === 'credentials') {
+        if (!value.trim()) {
+          setErrors(prev => ({ ...prev, credentials: 'Service Account JSON is required.' }));
+        } else {
+          try {
+            JSON.parse(value);
+            setErrors(prev => ({ ...prev, credentials: undefined }));
+          } catch {
+            setErrors(prev => ({ ...prev, credentials: 'Invalid JSON format.' }));
+          }
+        }
+      }
+    } else {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleDatabaseTypeChange = (type: Database['type']) => {
@@ -587,21 +637,7 @@ const Datasets: React.FC = () => {
                     value={formData.name}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Enter a unique name for this connection"
-                  />
-                </div>
-
-                {/* Display Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Display Name *</label>
-                  <input
-                    type="text"
-                    name="displayName"
-                    required
-                    value={formData.displayName}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Enter a friendly name for this connection"
+                    placeholder="Enter a name for this connection"
                   />
                 </div>
 
@@ -676,8 +712,8 @@ const Datasets: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };
-
 export default Datasets;
