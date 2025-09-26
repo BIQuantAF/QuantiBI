@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chart, Dataset, Dashboard } from '../../types';
 import { apiService } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
 
 const Charts: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();

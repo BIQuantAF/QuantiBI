@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 import { Chart } from '../../types';
 import { apiService } from '../../services/api';
 import ChartRenderer from './ChartRenderer';
