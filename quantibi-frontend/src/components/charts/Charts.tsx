@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 const Charts: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  // const { currentUser } = useAuth();
   const [charts, setCharts] = useState<Chart[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);

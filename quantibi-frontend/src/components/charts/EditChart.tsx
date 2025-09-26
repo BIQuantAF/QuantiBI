@@ -22,7 +22,7 @@ interface ChartData {
 const EditChart: React.FC = () => {
   const { workspaceId, chartId } = useParams<{ workspaceId: string; chartId: string }>();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  // const { currentUser } = useAuth();
   const [chartData, setChartData] = useState<ChartData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
