@@ -14,6 +14,32 @@ router.get('/:workspaceId/dashboards', authenticateUser, async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const dashboards = await Dashboard.find({ workspace: workspace._id })
+                                    .populate('charts')
+                                    .sort({ updatedAt: -1 });
+    res.json(dashboards);
+  } catch (error) {
+    console.error('Error fetching dashboards:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route   DELETE /api/workspaces/:workspaceId/dashboards/:dashboardId
+ * @desc    Delete a dashboard
+ * @access  Private
+ */
 router.delete('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (req, res) => {
   try {
     const { workspaceId, dashboardId } = req.params;
@@ -54,26 +80,6 @@ router.delete('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (
   } catch (error) {
     console.error('Error deleting dashboard:', error);
     res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
-  }
-});
-      return res.status(404).json({ message: 'Workspace not found' });
-    }
-
-    // Check if user has access to this workspace
-    const isMember = workspace.owner === req.user.uid || 
-                    workspace.members.some(member => member.uid === req.user.uid);
-    
-    if (!isMember) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const dashboards = await Dashboard.find({ workspace: workspace._id })
-                                    .populate('charts')
-                                    .sort({ updatedAt: -1 });
-    res.json(dashboards);
-  } catch (error) {
-    console.error('Error fetching dashboards:', error);
-    res.status(500).json({ message: 'Server error' });
   }
 });
 

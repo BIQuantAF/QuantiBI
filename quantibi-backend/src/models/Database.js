@@ -17,7 +17,7 @@ const databaseSchema = new mongoose.Schema({
   },
   displayName: {
     type: String,
-    required: true
+    required: false
   },
   // Connection details for traditional databases
   host: String,

@@ -7,6 +7,155 @@ import { apiService } from '../../services/api';
 const Datasets: React.FC = () => {
   const { currentWorkspace } = useWorkspace();
   const [showConnectionForm, setShowConnectionForm] = useState(false);
+  const [showDatasetForm, setShowDatasetForm] = useState(false);
+  const [datasetForm, setDatasetForm] = useState({
+    database: '',
+    name: '',
+    type: 'Physical',
+    schema: '',
+    table: '',
+    owners: [] as string[],
+  });
+  const [datasetSubmitting, setDatasetSubmitting] = useState(false);
+  const [datasetError, setDatasetError] = useState<string | null>(null);
+  // Fetch datasets for the workspace (for future: display list, refresh, etc.)
+  const [datasets, setDatasets] = useState<any[]>([]);
+  
+  // Modal state for viewing datasets
+  const [showDatasetsModal, setShowDatasetsModal] = useState(false);
+  const [selectedDatabase, setSelectedDatabase] = useState<Database | null>(null);
+  const [databaseDatasets, setDatabaseDatasets] = useState<any[]>([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ show: boolean; datasetId: string; datasetName: string }>({
+    show: false,
+    datasetId: '',
+    datasetName: ''
+  });
+  
+  const fetchDatasets = useCallback(async () => {
+    if (!currentWorkspace) return;
+    try {
+      const ds = await apiService.getDatasets(currentWorkspace._id);
+      // Future: Could use ds for displaying all datasets in workspace
+      setDatasets(ds);
+    } catch (err) {
+      // ignore for now
+    }
+  }, [currentWorkspace]);
+  useEffect(() => {
+    if (currentWorkspace) fetchDatasets();
+  }, [currentWorkspace, fetchDatasets]);
+  // Handle dataset form changes
+  const handleDatasetFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setDatasetForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Handle dataset creation
+  const handleCreateDataset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDatasetSubmitting(true);
+    setDatasetError(null);
+    try {
+      if (!currentWorkspace) throw new Error('No workspace selected');
+      if (!datasetForm.database || !datasetForm.name || !datasetForm.schema || !datasetForm.table) {
+        setDatasetError('Please fill all required fields.');
+        setDatasetSubmitting(false);
+        return;
+      }
+      const { database, ...rest } = datasetForm;
+      await apiService.createDataset(currentWorkspace._id, {
+        ...rest,
+        databaseId: database,
+        type: datasetForm.type as 'Physical' | 'Virtual',
+        owners: [currentWorkspace.owner],
+      });
+      setShowDatasetForm(false);
+      setDatasetForm({ database: '', name: '', type: 'Physical', schema: '', table: '', owners: [] });
+      fetchDatasets();
+      setSuccessMessage('Dataset created successfully!');
+    } catch (err: any) {
+      setDatasetError(err?.message || 'Failed to create dataset');
+    } finally {
+      setDatasetSubmitting(false);
+    }
+  };
+  
+  // Handle viewing datasets for a specific database
+  const handleViewDatasets = async (database: Database) => {
+    setSelectedDatabase(database);
+    setShowDatasetsModal(true);
+    setLoadingDatasets(true);
+    
+    try {
+      const allDatasets = await apiService.getDatasets(currentWorkspace!._id);
+      
+      // Log each dataset's database ID for debugging
+      allDatasets.forEach((dataset, index) => {
+        const dbId = typeof dataset.database === 'object' ? (dataset.database as any)._id : dataset.database;
+        console.log(`Dataset ${index}: "${dataset.name}" -> database ID: ${dbId}`);
+      });
+      
+      // Filter datasets that belong to this database
+      const filteredDatasets = allDatasets.filter(dataset => {
+        const datasetDbId = typeof dataset.database === 'object' ? (dataset.database as any)._id : dataset.database;
+        return datasetDbId === database._id;
+      });
+      setDatabaseDatasets(filteredDatasets);
+    } catch (err) {
+      console.error('Failed to fetch datasets for database:', err);
+      setDatabaseDatasets([]);
+    } finally {
+      setLoadingDatasets(false);
+    }
+  };
+
+  // Handle showing delete confirmation
+  const handleDeleteDataset = (datasetId: string, datasetName: string) => {
+    setConfirmDelete({
+      show: true,
+      datasetId,
+      datasetName
+    });
+  };
+
+  // Handle confirmed delete
+  const handleConfirmedDelete = async () => {
+    const { datasetId, datasetName } = confirmDelete;
+    setDeletingDatasetId(datasetId);
+    setConfirmDelete({ show: false, datasetId: '', datasetName: '' });
+    
+    try {
+      await apiService.deleteDataset(currentWorkspace!._id, datasetId);
+      // Remove from local state
+      setDatabaseDatasets(prev => prev.filter(ds => ds._id !== datasetId));
+      // Also refresh the main datasets list
+      fetchDatasets();
+      setSuccessMessage('Dataset deleted successfully!');
+      
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to delete dataset:', err);
+      setError('Failed to delete dataset');
+      
+      // Auto-hide error message after 5 seconds
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setDeletingDatasetId(null);
+    }
+  };
+
+  // Close modal
+  const handleCloseModal = () => {
+    setShowDatasetsModal(false);
+    setSelectedDatabase(null);
+    setDatabaseDatasets([]);
+    setDeletingDatasetId(null);
+    setConfirmDelete({ show: false, datasetId: '', datasetName: '' });
+  };
+  
   const [selectedDatabaseType, setSelectedDatabaseType] = useState<Database['type']>('PostgreSQL');
   const [formData, setDatabaseConnectionForm] = useState<DatabaseConnectionForm>({
     type: 'PostgreSQL',
@@ -438,6 +587,7 @@ const Datasets: React.FC = () => {
         </ol>
       </nav>
 
+
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Datasets</h1>
@@ -457,8 +607,118 @@ const Datasets: React.FC = () => {
           >
             Connect Database
           </button>
+          <button
+            onClick={() => setShowDatasetForm(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            Create Dataset
+          </button>
         </div>
       </div>
+      {/* Create Dataset Modal */}
+      {showDatasetForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Create Dataset</h3>
+                <button
+                  onClick={() => setShowDatasetForm(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleCreateDataset} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Database *</label>
+                  <select
+                    name="database"
+                    value={datasetForm.database}
+                    onChange={handleDatasetFormChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select a database</option>
+                    {databases.map((db) => (
+                      <option key={db._id} value={db._id}>{db.displayName || db.name} ({db.type})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Dataset Name *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={datasetForm.name}
+                    onChange={handleDatasetFormChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter dataset name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Type *</label>
+                  <select
+                    name="type"
+                    value={datasetForm.type}
+                    onChange={handleDatasetFormChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Physical">Physical</option>
+                    <option value="Virtual">Virtual</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Schema *</label>
+                  <input
+                    type="text"
+                    name="schema"
+                    value={datasetForm.schema}
+                    onChange={handleDatasetFormChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter schema (for BigQuery: dataset ID)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Table *</label>
+                  <input
+                    type="text"
+                    name="table"
+                    value={datasetForm.table}
+                    onChange={handleDatasetFormChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter table name"
+                  />
+                </div>
+                {datasetError && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{datasetError}</div>
+                )}
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDatasetForm(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={datasetSubmitting}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                  >
+                    {datasetSubmitting ? 'Creating...' : 'Create Dataset'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success Message */}
       {successMessage && (
@@ -559,10 +819,7 @@ const Datasets: React.FC = () => {
 
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => {
-                        // TODO: Implement view datasets functionality
-                        console.log('View datasets for database:', database._id);
-                      }}
+                      onClick={() => handleViewDatasets(database)}
                       className="flex-1 px-3 py-2 bg-indigo-600 text-white text-center text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       View Datasets
@@ -708,6 +965,134 @@ const Datasets: React.FC = () => {
                   </div>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Datasets Modal */}
+      {showDatasetsModal && selectedDatabase && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              {/* Modal Header */}
+              <div className="flex justify-between items-center pb-4 border-b">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Datasets in "{selectedDatabase.name}"
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Database Type: {selectedDatabase.type}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="mt-4">
+                {loadingDatasets ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    <span className="ml-2 text-gray-600">Loading datasets...</span>
+                  </div>
+                ) : databaseDatasets.length === 0 ? (
+                  <div className="text-center py-8">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h2a2 2 0 002-2z" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No datasets found</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      No datasets have been created for this database yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {databaseDatasets.map((dataset) => (
+                      <div key={dataset._id} className="bg-gray-50 rounded-lg p-4 border">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h4 className="text-sm font-medium text-gray-900">{dataset.name}</h4>
+                            <div className="mt-1 text-sm text-gray-500">
+                              <p>Type: <span className="font-medium">{dataset.type}</span></p>
+                              <p>Schema: <span className="font-medium">{dataset.schema}</span></p>
+                              <p>Table: <span className="font-medium">{dataset.table}</span></p>
+                              {dataset.createdAt && (
+                                <p>Created: <span className="font-medium">
+                                  {new Date(dataset.createdAt).toLocaleDateString()}
+                                </span></p>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteDataset(dataset._id, dataset.name)}
+                            disabled={deletingDatasetId === dataset._id}
+                            className="ml-4 px-3 py-1 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md border border-red-200 hover:border-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {deletingDatasetId === dataset._id ? (
+                              <div className="flex items-center">
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600 mr-1"></div>
+                                Deleting...
+                              </div>
+                            ) : (
+                              'Delete'
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="mt-6 pt-4 border-t flex justify-end">
+                <button
+                  onClick={handleCloseModal}
+                  className="px-4 py-2 bg-gray-500 text-white text-sm font-medium rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.684-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Dataset</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Are you sure you want to delete the dataset "<span className="font-semibold">{confirmDelete.datasetName}</span>"? This action cannot be undone.
+              </p>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setConfirmDelete({ show: false, datasetId: '', datasetName: '' })}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmedDelete}
+                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -125,10 +125,23 @@ const CreateChart: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Transform data from Chart.js format to the format expected by ChartRenderer
-      const transformedData = aiResponse.data.labels.map((label: string, index: number) => ({
-        label: label,
-        value: aiResponse.data.datasets[0].data[index]
-      }));
+      // Handle both single-series and multi-series data
+      let transformedData;
+      
+      if (aiResponse.data.datasets.length > 1) {
+        // Multi-series data - preserve the Chart.js structure
+        console.log('Multi-series chart detected with', aiResponse.data.datasets.length, 'series');
+        transformedData = {
+          labels: aiResponse.data.labels,
+          datasets: aiResponse.data.datasets
+        };
+      } else {
+        // Single-series data - convert to simple format
+        transformedData = aiResponse.data.labels.map((label: string, index: number) => ({
+          label: label,
+          value: aiResponse.data.datasets[0].data[index]
+        }));
+      }
 
       console.log('AI Response:', aiResponse);
       console.log('Transformed Data:', transformedData);

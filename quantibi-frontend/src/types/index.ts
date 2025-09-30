@@ -1,3 +1,12 @@
+// Dataset creation type for API (allows databaseId)
+export interface DatasetCreate {
+  name: string;
+  type: 'Physical' | 'Virtual';
+  databaseId: string;
+  schema: string;
+  table: string;
+  owners?: string[];
+}
 // User types
 export interface User {
   uid: string;

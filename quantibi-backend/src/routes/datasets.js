@@ -4,6 +4,7 @@ const { authenticateUser } = require('../middleware/auth');
 const Dataset = require('../models/Dataset');
 const Workspace = require('../models/Workspace');
 const Database = require('../models/Database');
+const bigqueryService = require('../services/bigquery');
 
 /**
  * @route   GET /api/workspaces/:workspaceId/datasets
@@ -61,6 +62,40 @@ router.post('/:workspaceId/datasets', authenticateUser, async (req, res) => {
         message: 'Missing required fields',
         required: ['name', 'type', 'databaseId', 'schema', 'table']
       });
+    }
+
+    // Get the database to validate BigQuery datasets/tables
+    const database = await Database.findById(databaseId);
+    if (!database) {
+      return res.status(404).json({ message: 'Database not found' });
+    }
+
+    // For BigQuery, validate that the dataset and table exist
+    if (database.type === 'Google BigQuery') {
+      try {
+        const validation = await bigqueryService.validateDatasetAndTable(
+          database.projectId,
+          database.credentials,
+          schema,
+          table
+        );
+        
+        if (!validation.exists) {
+          return res.status(400).json({
+            message: 'BigQuery dataset or table validation failed',
+            details: validation.message,
+            dataset: schema,
+            table: table,
+            project: database.projectId
+          });
+        }
+      } catch (error) {
+        console.error('Error validating BigQuery dataset/table:', error);
+        return res.status(500).json({
+          message: 'Error validating BigQuery dataset/table',
+          error: error.message
+        });
+      }
     }
 
     const dataset = new Dataset({
@@ -167,8 +202,18 @@ router.get('/:workspaceId/databases/:databaseId/schemas', authenticateUser, asyn
       return res.status(404).json({ message: 'Database not found' });
     }
 
+    // For BigQuery, fetch actual datasets (schemas)
+    if (database.type === 'Google BigQuery') {
+      try {
+        const datasets = await bigqueryService.listDatasets(database.projectId, database.credentials);
+        res.json(datasets);
+      } catch (error) {
+        console.error('Error fetching BigQuery datasets:', error);
+        res.status(500).json({ message: 'Error fetching BigQuery datasets', error: error.message });
+      }
+    }
     // For file-based databases, return the sheet name or default schema
-    if (database.type === 'XLS') {
+    else if (database.type === 'XLS') {
       const schemas = [database.sheetName || 'Sheet1'];
       res.json(schemas);
     } else if (database.type === 'CSV') {
@@ -213,8 +258,21 @@ router.get('/:workspaceId/databases/:databaseId/tables', authenticateUser, async
       return res.status(404).json({ message: 'Database not found' });
     }
 
+    // For BigQuery, fetch actual tables from the specified dataset (schema)
+    if (database.type === 'Google BigQuery') {
+      if (!schema) {
+        return res.status(400).json({ message: 'Schema parameter is required for BigQuery' });
+      }
+      try {
+        const tables = await bigqueryService.listTables(database.projectId, database.credentials, schema);
+        res.json(tables);
+      } catch (error) {
+        console.error('Error fetching BigQuery tables:', error);
+        res.status(500).json({ message: 'Error fetching BigQuery tables', error: error.message });
+      }
+    }
     // For file-based databases, return the sheet name or default table
-    if (database.type === 'XLS') {
+    else if (database.type === 'XLS') {
       const tables = [database.sheetName || 'Sheet1'];
       res.json(tables);
     } else if (database.type === 'CSV') {

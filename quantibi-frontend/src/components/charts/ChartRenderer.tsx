@@ -29,13 +29,19 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
   const [isEditing, setIsEditing] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
 
+  // Determine chart height based on context
+  const chartHeight = minimal ? "100%" : 400;
+
   // Update editable SQL when chart data changes
   useEffect(() => {
     setEditableSQL(chartData.sql);
   }, [chartData.sql]);
 
   const renderChart = () => {
-    if (!chartData.data || !Array.isArray(chartData.data) || chartData.data.length === 0) {
+    // Handle multi-series data detection
+    const isMultiSeriesData = chartData.data && typeof chartData.data === 'object' && 'labels' in chartData.data && 'datasets' in chartData.data;
+    
+    if (!chartData.data || (Array.isArray(chartData.data) && chartData.data.length === 0) || (isMultiSeriesData && (!chartData.data.labels || chartData.data.labels.length === 0))) {
       return (
         <div className="flex items-center justify-center h-64 text-gray-500">
           No data available to display
@@ -43,19 +49,51 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
       );
     }
 
-    // Transform data for Recharts (ensure it has the right format)
-    const chartDataForRecharts = chartData.data.map((item: any, index: number) => ({
-      name: item.label || `Item ${index + 1}`,
-      value: item.value || 0,
-      ...item // Include any additional properties
-    }));
+    let chartDataForRecharts;
+    let isMultiSeries = false;
+    
+    if (isMultiSeriesData) {
+      console.log('Processing multi-series data:', chartData.data);
+      console.log('Labels:', chartData.data.labels);
+      console.log('Datasets:', chartData.data.datasets);
+      console.log('Number of labels:', chartData.data.labels?.length);
+      console.log('Number of datasets:', chartData.data.datasets?.length);
+      
+      // Multi-series format - convert Chart.js format to Recharts format
+      const labels = chartData.data.labels;
+      const datasets = chartData.data.datasets;
+      isMultiSeries = true;
+      
+      chartDataForRecharts = labels.map((label: string, index: number) => {
+        const dataPoint: any = { name: label };
+        
+        // Add data from each series/dataset
+        datasets.forEach((dataset: any, datasetIndex: number) => {
+          const seriesKey = dataset.label || `Series ${datasetIndex + 1}`;
+          dataPoint[seriesKey] = dataset.data[index] || 0;
+        });
+        
+        return dataPoint;
+      });
+      
+      console.log('Transformed multi-series data for Recharts:', chartDataForRecharts);
+      console.log('Sample transformed data point:', chartDataForRecharts[0]);
+      console.log('Series keys found:', Object.keys(chartDataForRecharts[0] || {}).filter(k => k !== 'name'));
+    } else {
+      // Single-series format - use original logic
+      chartDataForRecharts = chartData.data.map((item: any, index: number) => ({
+        name: item.label || `Item ${index + 1}`,
+        value: item.value || 0,
+        ...item // Include any additional properties
+      }));
+    }
 
     const colors = chartData.style.colors || ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'];
 
     switch (chartData.type) {
       case 'bar':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={chartDataForRecharts}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
@@ -97,54 +135,108 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
         );
 
       case 'line':
-        return (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartDataForRecharts}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fontSize: 12 }}
-                angle={-45}
-                textAnchor="end"
-                height={80}
-                label={{ 
-                  value: chartData.style.axis?.x?.title || 'Categories', 
-                  position: 'insideBottom',
-                  offset: 20,
-                  style: { fill: '#374151', fontSize: 14 }
-                }}
-              />
-              <YAxis 
-                tick={{ fontSize: 12 }}
-                label={{ 
-                  value: chartData.style.axis?.y?.title || 'Values', 
-                  angle: -90, 
-                  position: 'insideLeft',
-                  style: { textAnchor: 'middle' }
-                }}
-              />
-              <Tooltip 
-                formatter={(value: any, name: any) => [value, 'Value']}
-                labelFormatter={(label) => `Category: ${label}`}
-              />
-              {chartData.style.legend?.display && (
-                <Legend verticalAlign="top" height={36} />
-              )}
-              <Line 
-                type="monotone" 
-                dataKey="value" 
-                stroke={colors[0]} 
-                strokeWidth={3}
-                dot={{ fill: colors[0], strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: colors[0], strokeWidth: 2 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        );
+        if (isMultiSeries) {
+          // Multi-series line chart
+          const seriesKeys = Object.keys(chartDataForRecharts[0] || {}).filter(key => key !== 'name');
+          
+          return (
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <LineChart data={chartDataForRecharts}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  label={{ 
+                    value: chartData.style.axis?.x?.title || 'Categories', 
+                    position: 'insideBottom',
+                    offset: 20,
+                    style: { fill: '#374151', fontSize: 14 }
+                  }}
+                />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  label={{ 
+                    value: chartData.style.axis?.y?.title || 'Values', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    style: { textAnchor: 'middle' }
+                  }}
+                />
+                <Tooltip 
+                  formatter={(value: any, name: any) => [value, name]}
+                  labelFormatter={(label) => `Time: ${label}`}
+                />
+                {chartData.style.legend?.display && (
+                  <Legend verticalAlign="top" height={36} />
+                )}
+                {seriesKeys.map((seriesKey, index) => (
+                  <Line 
+                    key={seriesKey}
+                    type="monotone" 
+                    dataKey={seriesKey}
+                    stroke={colors[index % colors.length]} 
+                    strokeWidth={3}
+                    dot={{ fill: colors[index % colors.length], strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6, stroke: colors[index % colors.length], strokeWidth: 2 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          );
+        } else {
+          // Single-series line chart
+          return (
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <LineChart data={chartDataForRecharts}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  label={{ 
+                    value: chartData.style.axis?.x?.title || 'Categories', 
+                    position: 'insideBottom',
+                    offset: 20,
+                    style: { fill: '#374151', fontSize: 14 }
+                  }}
+                />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  label={{ 
+                    value: chartData.style.axis?.y?.title || 'Values', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    style: { textAnchor: 'middle' }
+                  }}
+                />
+                <Tooltip 
+                  formatter={(value: any, name: any) => [value, 'Value']}
+                  labelFormatter={(label) => `Category: ${label}`}
+                />
+                {chartData.style.legend?.display && (
+                  <Legend verticalAlign="top" height={36} />
+                )}
+                <Line 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke={colors[0]} 
+                  strokeWidth={3}
+                  dot={{ fill: colors[0], strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, stroke: colors[0], strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          );
+        }
 
       case 'pie':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <PieChart>
               <Pie
                 data={chartDataForRecharts}
@@ -439,11 +531,11 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ chartData, onChartUpdate,
 
   if (minimal) {
     return (
-      <div className="h-full flex flex-col">
-        <div className="p-2 pb-0">
-          <h2 className="text-lg font-semibold text-gray-900 text-center truncate">{chartData.name}</h2>
+      <div className="h-full w-full flex flex-col">
+        <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+          <h3 className="text-sm font-medium text-gray-900 truncate text-center">{chartData.name}</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 p-2" style={{ minHeight: 0 }}>
           <div className="w-full h-full">
             {renderChart()}
           </div>

@@ -196,11 +196,11 @@ router.delete('/:workspaceId/charts/:chartId', authenticateUser, async (req, res
 });
 
 /**
- * @route   POST /api/workspaces/:workspaceId/charts/generate
+ * @route   POST /api/workspaces/:workspaceId/charts/ai/generate
  * @desc    Generate a chart using AI
  * @access  Private
  */
-router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/charts/ai/generate', authenticateUser, async (req, res) => {
   try {
     console.log('Received chart generation request:', {
       workspaceId: req.params.workspaceId,
@@ -264,33 +264,58 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
       }
     }];
 
-    // For BigQuery, run the query and get data
+    // For BigQuery, get data from the specific table
     if (datasetObj.database.type === 'Google BigQuery') {
       try {
-        const bigquery = bigqueryService.createBigQueryClient(datasetObj.database.projectId, datasetObj.database.credentials);
-        // For demo, just get the first 100 rows from the first table in the dataset
-        // You may want to use aiResponse.dataQuery to build a more specific query
-        const [tables] = await bigquery.dataset(datasetObj.name).getTables();
-        if (!tables || tables.length === 0) {
-          return res.status(404).json({ message: 'No tables found in BigQuery dataset' });
+        // First validate that the dataset and table exist
+        const validation = await bigqueryService.validateDatasetAndTable(
+          datasetObj.database.projectId,
+          datasetObj.database.credentials,
+          datasetObj.schema,
+          datasetObj.table
+        );
+        
+        if (!validation.exists) {
+          console.error('BigQuery validation failed:', validation.message);
+          return res.status(404).json({ 
+            message: 'BigQuery dataset or table not found',
+            details: validation.message,
+            dataset: datasetObj.schema,
+            table: datasetObj.table,
+            project: datasetObj.database.projectId
+          });
         }
-        const table = tables[0];
-        const [rows] = await table.getRows({ maxResults: 100 });
-        // Use the first row's keys as columns
-        const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+        
+        const tableData = await bigqueryService.getTableData(
+          datasetObj.database.projectId, 
+          datasetObj.database.credentials, 
+          datasetObj.schema, 
+          datasetObj.table,
+          100
+        );
+        
         datasetDetails[0].database = {
           ...datasetDetails[0].database,
-          columns,
-          sampleData: rows.slice(0, 5),
-          totalRows: rows.length
+          columns: tableData.columns,
+          sampleData: tableData.sampleData,
+          totalRows: tableData.totalRows
         };
+        
         console.log('BigQuery data loaded:', {
-          rowCount: rows.length,
-          columns
+          rowCount: tableData.totalRows,
+          columns: tableData.columns,
+          dataset: datasetObj.schema,
+          table: datasetObj.table
         });
       } catch (error) {
         console.error('Error querying BigQuery:', error);
-        return res.status(500).json({ message: 'Error querying BigQuery', error: error.message });
+        return res.status(500).json({ 
+          message: 'Error querying BigQuery', 
+          error: error.message,
+          dataset: datasetObj.schema,
+          table: datasetObj.table,
+          project: datasetObj.database.projectId
+        });
       }
     }
 
@@ -340,6 +365,7 @@ router.post('/:workspaceId/charts/generate', authenticateUser, async (req, res) 
     }
 
     console.log('Dataset details loaded');
+    console.log('Dataset details structure:', JSON.stringify(datasetDetails, null, 2));
 
     // Create prompt for OpenAI with detailed data information
     const prompt = `Given the following dataset and its contents:
@@ -352,32 +378,83 @@ The JSON object must have exactly these fields:
 {
   "dataQuery": {
     "type": "count" | "sum" | "average" | "group",
-    "measure": "column name to measure",
+    "measure": "column name to measure (required for sum/average)",
     "dimension": "column name to group by (if needed)",
+    "multiSeries": "true for multi-series comparisons (e.g., 'A vs B by time')",
+    "seriesDimension": "column name to separate series by (when multiSeries is true)",
     "filters": [
       {
         "column": "column name",
-        "operator": "=" | ">=" | "<=" | ">" | "<",
-        "value": "value to filter by"
+        "operator": "=" | ">=" | "<=" | ">" | "<" | "IN" | "LIKE",
+        "value": "single value OR array of values for IN operator"
       }
     ]
   },
-  "chartType": "one of: bar, line, pie, scatter, radar",
+  "chartType": "one of: bar, line, pie, scatter, area",
   "explanation": "why this visualization is suitable"
 }
 
-Generate:
-1. A data query specification that will answer the question using the available columns
-2. The most appropriate chart type from the allowed options
-3. A brief explanation of why this visualization is suitable
+IMPORTANT INSTRUCTIONS:
+1. For comparisons between multiple values (like "Kentucky vs California"), use the IN operator with an array of values
+2. For time-based queries, use appropriate date filtering with >= and <= operators
+3. CRITICAL: When you see "vs" or "versus" with time words like "by month", "by year", "over time", set "multiSeries": true
+4. For multi-series queries, set "dimension" to the TIME column and "seriesDimension" to the COMPARISON column
+5. For sales/revenue queries, use "sum" type with the appropriate measure column
+6. Choose chart types wisely: line for time trends with comparisons, bar for simple comparisons, pie for parts of whole
 
-For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], and the user asks about orders in Kentucky in November 2016, you would generate:
+PATTERN DETECTION:
+- "A vs B by [time]" → multiSeries: true, dimension: [time column], seriesDimension: [location/category column]
+- "A vs B" (no time) → multiSeries: false, dimension: [location/category column]
+- "A over time" → multiSeries: false, dimension: [time column]
+
+EXAMPLES:
+
+For "show me sales in Kentucky vs California by month" or "sales for Kentucky vs California by month":
+{
+  "dataQuery": {
+    "type": "sum",
+    "measure": "Sales", 
+    "dimension": "OrderDate",
+    "multiSeries": true,
+    "seriesDimension": "State",
+    "filters": [
+      {
+        "column": "State",
+        "operator": "IN",
+        "value": ["Kentucky", "California"]
+      }
+    ]
+  },
+  "chartType": "line",
+  "explanation": "Line chart is perfect for comparing sales trends between states over time"
+}
+
+For "show me sales for Kentucky vs California" (simple comparison):
+{
+  "dataQuery": {
+    "type": "sum",
+    "measure": "Sales", 
+    "dimension": "State",
+    "filters": [
+      {
+        "column": "State",
+        "operator": "IN",
+        "value": ["Kentucky", "California"]
+      }
+    ]
+  },
+  "chartType": "bar",
+  "explanation": "Bar chart is perfect for comparing total sales between different states"
+}
+
+For "orders in Kentucky in November 2016":
 {
   "dataQuery": {
     "type": "count",
+    "dimension": "OrderDate",
     "filters": [
       {
-        "column": "Location",
+        "column": "State",
         "operator": "=",
         "value": "Kentucky"
       },
@@ -388,15 +465,21 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
       },
       {
         "column": "OrderDate",
-        "operator": "<",
-        "value": "2016-12-01"
+        "operator": "<=",
+        "value": "2016-11-30"
       }
     ]
   },
-  "chartType": "bar",
-  "explanation": "A bar chart is suitable for showing the count of orders in a specific time period and location"
+  "chartType": "line",
+  "explanation": "Line chart shows the trend of orders over time within the specified period"
 }`;
 
+    console.log('=== AI CHART GENERATION DEBUG ===');
+    console.log('User Query:', query);
+    console.log('Dataset type:', datasetDetails.type);
+    console.log('Available columns:', datasetDetails.columns);
+    console.log('Sample data:', JSON.stringify(datasetDetails.sampleData?.[0], null, 2));
+    
     console.log('Sending prompt to OpenAI');
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
@@ -416,7 +499,7 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
       response_format: { type: "json_object" }
     });
 
-    console.log('Received OpenAI response:', completion.choices[0].message.content);
+    console.log('Raw OpenAI response:', completion.choices[0].message.content);
 
     if (!completion || !completion.choices || !completion.choices[0]) {
       throw new Error('Invalid response from OpenAI API');
@@ -434,7 +517,32 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
     let aiResponse;
     try {
       aiResponse = JSON.parse(content);
-      console.log('Parsed AI response:', aiResponse);
+      console.log('=== PARSED AI RESPONSE ===');
+      console.log('Data Query Type:', aiResponse.dataQuery?.type);
+      console.log('Measure:', aiResponse.dataQuery?.measure);
+      console.log('Dimension:', aiResponse.dataQuery?.dimension);
+      console.log('Multi-Series:', aiResponse.dataQuery?.multiSeries);
+      console.log('Series Dimension:', aiResponse.dataQuery?.seriesDimension);
+      console.log('Filters:', JSON.stringify(aiResponse.dataQuery?.filters, null, 2));
+      console.log('Chart Type:', aiResponse.chartType);
+      console.log('Explanation:', aiResponse.explanation);
+      
+      // Auto-detect multi-series queries if AI missed it
+      if (!aiResponse.dataQuery.multiSeries && 
+          aiResponse.dataQuery.filters?.some(f => f.operator === 'IN' && Array.isArray(f.value)) &&
+          aiResponse.dataQuery.dimension?.toLowerCase().includes('date') &&
+          (query.toLowerCase().includes('vs') || query.toLowerCase().includes('versus'))) {
+        
+        console.log('=== AUTO-DETECTING MULTI-SERIES QUERY ===');
+        aiResponse.dataQuery.multiSeries = true;
+        
+        // Find the filter with IN operator to determine series dimension
+        const inFilter = aiResponse.dataQuery.filters.find(f => f.operator === 'IN' && Array.isArray(f.value));
+        if (inFilter) {
+          aiResponse.dataQuery.seriesDimension = inFilter.column;
+          console.log('Auto-detected series dimension:', inFilter.column);
+        }
+      }
     } catch (parseError) {
       console.error('Failed to parse OpenAI response:', content);
       throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
@@ -453,7 +561,16 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
 
     // Process the data according to the query specification
     let chartData = null;
+    console.log('Starting data processing for', datasetDetails.length, 'datasets');
+    
     for (const dataset of datasetDetails) {
+      console.log('Processing dataset:', {
+        type: dataset.database.type,
+        name: dataset.name,
+        schema: dataset.schema,
+        table: dataset.table
+      });
+      
       if (dataset.database.type === 'XLS') {
         // Read the Excel file again to get the full data
         console.log('Reading Excel file for processing:', dataset.database.filePath);
@@ -516,6 +633,24 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
               switch (filter.operator) {
                 case '=':
                   return value?.toString().toLowerCase() === filterValue.toLowerCase();
+                case 'IN':
+                  // Handle IN operator with array of values
+                  if (Array.isArray(filterValue)) {
+                    return filterValue.some(val => 
+                      value?.toString().toLowerCase() === val.toLowerCase()
+                    );
+                  }
+                  return false;
+                case 'LIKE':
+                  return value?.toString().toLowerCase().includes(filterValue.toLowerCase());
+                case '>':
+                  return parseFloat(value) > parseFloat(filterValue);
+                case '<':
+                  return parseFloat(value) < parseFloat(filterValue);
+                case '>=':
+                  return parseFloat(value) >= parseFloat(filterValue);
+                case '<=':
+                  return parseFloat(value) <= parseFloat(filterValue);
                 default:
                   return false;
               }
@@ -589,39 +724,103 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
 
           case 'sum':
             if (aiResponse.dataQuery.dimension) {
-              // Group by dimension and sum
-              const groups = {};
-              filteredData.forEach(row => {
-                let key = row[aiResponse.dataQuery.dimension];
+              // Check if this is a multi-series query (e.g., "Kentucky vs California by month")
+              if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+                console.log('=== PROCESSING MULTI-SERIES EXCEL DATA ===');
+                console.log('Dimension (time):', aiResponse.dataQuery.dimension);
+                console.log('Series dimension (category):', aiResponse.dataQuery.seriesDimension);
+                console.log('Measure:', aiResponse.dataQuery.measure);
                 
-                // If the dimension is a date field, group by month
-                if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
-                  const date = parseDate(row[aiResponse.dataQuery.dimension]);
-                  if (date) {
-                    key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                // Multi-series grouping (e.g., group by month, separate series for each state)
+                const seriesData = {};
+                const allLabels = new Set();
+                
+                filteredData.forEach(row => {
+                  let key = row[aiResponse.dataQuery.dimension];
+                  const seriesKey = row[aiResponse.dataQuery.seriesDimension];
+                  
+                  console.log('Processing row:', {
+                    timeKey: key,
+                    seriesKey: seriesKey,
+                    measure: row[aiResponse.dataQuery.measure]
+                  });
+                  
+                  // If the dimension is a date field, group by month
+                  if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                    const date = parseDate(row[aiResponse.dataQuery.dimension]);
+                    if (date) {
+                      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    }
                   }
+                  
+                  const value = parseFloat(row[aiResponse.dataQuery.measure]) || 0;
+                  
+                  if (!seriesData[seriesKey]) {
+                    seriesData[seriesKey] = {};
+                  }
+                  if (!seriesData[seriesKey][key]) {
+                    seriesData[seriesKey][key] = 0;
+                  }
+                  seriesData[seriesKey][key] += value;
+                  allLabels.add(key);
+                });
+                
+                console.log('Series data:', seriesData);
+                console.log('All labels:', Array.from(allLabels));
+                
+                // Sort labels if they're dates
+                const labels = Array.from(allLabels);
+                if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                  labels.sort();
                 }
                 
-                const value = parseFloat(row[aiResponse.dataQuery.measure]) || 0;
-                if (!groups[key]) {
-                  groups[key] = 0;
+                // Create datasets for each series
+                const datasets = Object.keys(seriesData).map(seriesKey => ({
+                  label: `${seriesKey} - ${aiResponse.dataQuery.measure}`,
+                  data: labels.map(label => seriesData[seriesKey][label] || 0)
+                }));
+                
+                console.log('Final datasets:', datasets);
+                
+                result = {
+                  labels: labels,
+                  datasets: datasets
+                };
+              } else {
+                // Single-series grouping (original logic)
+                const groups = {};
+                filteredData.forEach(row => {
+                  let key = row[aiResponse.dataQuery.dimension];
+                  
+                  // If the dimension is a date field, group by month
+                  if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                    const date = parseDate(row[aiResponse.dataQuery.dimension]);
+                    if (date) {
+                      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                  }
+                  
+                  const value = parseFloat(row[aiResponse.dataQuery.measure]) || 0;
+                  if (!groups[key]) {
+                    groups[key] = 0;
+                  }
+                  groups[key] += value;
+                });
+                
+                // Sort labels if they're dates
+                const labels = Object.keys(groups);
+                if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                  labels.sort();
                 }
-                groups[key] += value;
-              });
-              
-              // Sort labels if they're dates
-              const labels = Object.keys(groups);
-              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
-                labels.sort();
+                
+                result = {
+                  labels: labels,
+                  datasets: [{
+                    label: `Sum of ${aiResponse.dataQuery.measure}`,
+                    data: labels.map(key => groups[key])
+                  }]
+                };
               }
-              
-              result = {
-                labels: labels,
-                datasets: [{
-                  label: `Sum of ${aiResponse.dataQuery.measure}`,
-                  data: labels.map(key => groups[key])
-                }]
-              };
             } else {
               // Simple sum
               const sum = filteredData.reduce((acc, row) => {
@@ -684,6 +883,355 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
           console.error('Error processing Excel file:', error);
           throw new Error(`Error processing Excel file: ${error.message}`);
         }
+      } else if (dataset.database.type === 'Google BigQuery') {
+        // Handle BigQuery data processing
+        console.log('Processing BigQuery data for chart generation');
+        
+        try {
+          // Build SQL query based on the AI response
+          let sqlQuery = '';
+          const tableName = `\`${dataset.database.projectId}.${dataset.schema}.${dataset.table}\``;
+          
+          // Helper function to escape column names for BigQuery
+          const escapeColumnName = (columnName) => {
+            // If column name contains spaces or special characters, wrap in backticks
+            if (columnName.includes(' ') || columnName.includes('-') || /[^a-zA-Z0-9_]/.test(columnName)) {
+              return `\`${columnName}\``;
+            }
+            return columnName;
+          };
+          
+          switch (aiResponse.dataQuery.type) {
+            case 'count':
+              if (aiResponse.dataQuery.dimension) {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                sqlQuery = `SELECT ${dimension}, COUNT(*) as count FROM ${tableName}`;
+              } else {
+                sqlQuery = `SELECT COUNT(*) as count FROM ${tableName}`;
+              }
+              break;
+            case 'sum':
+              if (aiResponse.dataQuery.dimension) {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                const measure = escapeColumnName(aiResponse.dataQuery.measure);
+                
+                // Check if this is a multi-series query
+                if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+                  const seriesDimension = escapeColumnName(aiResponse.dataQuery.seriesDimension);
+                  
+                  // For date dimensions, aggregate by month for better visualization
+                  if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                    sqlQuery = `SELECT 
+                      FORMAT_DATE('%Y-%m', ${dimension}) as month_year,
+                      ${seriesDimension}, 
+                      SUM(${measure}) as total 
+                    FROM ${tableName}`;
+                  } else {
+                    sqlQuery = `SELECT ${dimension}, ${seriesDimension}, SUM(${measure}) as total FROM ${tableName}`;
+                  }
+                  console.log('Generated multi-series BigQuery SQL:', sqlQuery);
+                } else {
+                  // For date dimensions, aggregate by month for single series too
+                  if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                    sqlQuery = `SELECT 
+                      FORMAT_DATE('%Y-%m', ${dimension}) as month_year,
+                      SUM(${measure}) as total 
+                    FROM ${tableName}`;
+                  } else {
+                    sqlQuery = `SELECT ${dimension}, SUM(${measure}) as total FROM ${tableName}`;
+                  }
+                  console.log('Generated single-series BigQuery SQL:', sqlQuery);
+                }
+              } else {
+                const measure = escapeColumnName(aiResponse.dataQuery.measure);
+                sqlQuery = `SELECT SUM(${measure}) as total FROM ${tableName}`;
+              }
+              break;
+            case 'average':
+              if (aiResponse.dataQuery.dimension) {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                const measure = escapeColumnName(aiResponse.dataQuery.measure);
+                sqlQuery = `SELECT ${dimension}, AVG(${measure}) as average FROM ${tableName}`;
+              } else {
+                const measure = escapeColumnName(aiResponse.dataQuery.measure);
+                sqlQuery = `SELECT AVG(${measure}) as average FROM ${tableName}`;
+              }
+              break;
+            default:
+              // For other types, just select the data with optional filtering
+              sqlQuery = `SELECT * FROM ${tableName}`;
+          }
+          
+          // Add WHERE clause if there are filters
+          if (aiResponse.dataQuery.filters && aiResponse.dataQuery.filters.length > 0) {
+            const whereClause = aiResponse.dataQuery.filters.map(filter => {
+              const columnName = escapeColumnName(filter.column);
+              
+              // Handle IN operator with array values
+              if (filter.operator === 'IN' && Array.isArray(filter.value)) {
+                const valueList = filter.value.map(val => `'${val}'`).join(', ');
+                return `${columnName} IN (${valueList})`;
+              }
+              // Handle LIKE operator for partial matches
+              else if (filter.operator === 'LIKE') {
+                return `${columnName} LIKE '%${filter.value}%'`;
+              }
+              // Handle regular operators
+              else {
+                // Handle different data types for filtering
+                if (typeof filter.value === 'string') {
+                  return `${columnName} ${filter.operator} '${filter.value}'`;
+                } else {
+                  return `${columnName} ${filter.operator} ${filter.value}`;
+                }
+              }
+            }).join(' AND ');
+            sqlQuery += ` WHERE ${whereClause}`;
+          }
+          
+          // Add GROUP BY if there's a dimension for aggregation queries
+          if (aiResponse.dataQuery.dimension && ['count', 'sum', 'average'].includes(aiResponse.dataQuery.type)) {
+            if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+              const seriesDimension = escapeColumnName(aiResponse.dataQuery.seriesDimension);
+              // For date dimensions, group by the formatted month_year
+              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                sqlQuery += ` GROUP BY month_year, ${seriesDimension}`;
+              } else {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                sqlQuery += ` GROUP BY ${dimension}, ${seriesDimension}`;
+              }
+            } else {
+              // For date dimensions, group by the formatted month_year
+              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                sqlQuery += ` GROUP BY month_year`;
+              } else {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                sqlQuery += ` GROUP BY ${dimension}`;
+              }
+            }
+          }
+          
+          // Add HAVING clause to filter out zero values for sum aggregations
+          if (aiResponse.dataQuery.type === 'sum') {
+            sqlQuery += ` HAVING total > 0`;
+          }
+          
+          // Add ORDER BY for better presentation
+          if (aiResponse.dataQuery.dimension) {
+            if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+              const seriesDimension = escapeColumnName(aiResponse.dataQuery.seriesDimension);
+              // For date dimensions, order by the formatted month_year
+              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                sqlQuery += ` ORDER BY month_year, ${seriesDimension}`;
+              } else {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                sqlQuery += ` ORDER BY ${dimension}, ${seriesDimension}`;
+              }
+            } else {
+              // For date dimensions, order by the formatted month_year
+              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                sqlQuery += ` ORDER BY month_year`;
+              } else {
+                const dimension = escapeColumnName(aiResponse.dataQuery.dimension);
+                sqlQuery += ` ORDER BY ${dimension}`;
+              }
+            }
+          }
+          
+          // Limit results to prevent excessive data
+          sqlQuery += ' LIMIT 1000';
+          
+          console.log('Executing BigQuery SQL:', sqlQuery);
+          
+          // Execute the query
+          const queryResults = await bigqueryService.executeQuery(
+            dataset.database.projectId,
+            dataset.database.credentials,
+            sqlQuery
+          );
+          
+          console.log('BigQuery results:', queryResults.length, 'rows');
+          
+          // Debug: Log first few rows to understand data structure
+          if (queryResults.length > 0) {
+            console.log('Sample query result:', JSON.stringify(queryResults[0], null, 2));
+          }
+          
+          // Process results into chart data format
+          let result = null;
+          
+          if (aiResponse.dataQuery.dimension && queryResults.length > 0) {
+            // Helper function to extract proper value from BigQuery results
+            const extractValue = (value) => {
+              if (value && typeof value === 'object' && value.value !== undefined) {
+                // Handle BigQuery date/datetime objects
+                return value.value;
+              }
+              return value;
+            };
+            
+            // Check if this is a multi-series query
+            if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+              console.log('=== PROCESSING MULTI-SERIES BIGQUERY DATA ===');
+              console.log('Dimension (time):', aiResponse.dataQuery.dimension);
+              console.log('Series dimension (category):', aiResponse.dataQuery.seriesDimension);
+              console.log('Measure:', aiResponse.dataQuery.measure);
+              console.log('Query results count:', queryResults.length);
+              
+              // Multi-series processing (e.g., Kentucky vs California by month)
+              const seriesData = {};
+              const allLabels = new Set();
+              
+              queryResults.forEach((row, index) => {
+                // For date dimensions, use month_year field; otherwise use the original dimension
+                let labelValue = aiResponse.dataQuery.dimension.toLowerCase().includes('date') 
+                  ? extractValue(row.month_year) 
+                  : extractValue(row[aiResponse.dataQuery.dimension]);
+                  
+                const seriesValue = extractValue(row[aiResponse.dataQuery.seriesDimension]);
+                
+                console.log(`Processing BigQuery row ${index}:`, {
+                  rawRow: row,
+                  dimension: aiResponse.dataQuery.dimension,
+                  seriesDimension: aiResponse.dataQuery.seriesDimension,
+                  labelValue: labelValue,
+                  seriesValue: seriesValue,
+                  totalValue: row.total
+                });
+                
+                // No need for additional date formatting since we're using FORMAT_DATE in SQL
+                labelValue = String(labelValue || '');
+                const dataValue = parseFloat(extractValue(row.total || row.count || row.average)) || 0;
+                
+                if (!seriesData[seriesValue]) {
+                  seriesData[seriesValue] = {};
+                }
+                seriesData[seriesValue][labelValue] = dataValue;
+                allLabels.add(labelValue);
+              });
+              
+              console.log('Series data after processing:', seriesData);
+              console.log('All labels:', Array.from(allLabels));
+              
+              // Sort labels if they're dates
+              const labels = Array.from(allLabels);
+              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                labels.sort();
+              }
+              
+              // Create datasets for each series
+              const datasets = Object.keys(seriesData).map(seriesKey => ({
+                label: `${seriesKey} - ${aiResponse.dataQuery.measure || 'Count'}`,
+                data: labels.map(label => seriesData[seriesKey][label] || 0)
+              }));
+              
+              console.log('Final BigQuery datasets:', datasets);
+              
+              result = {
+                labels: labels,
+                datasets: datasets
+              };
+            } else {
+              // Single-series processing (original logic)
+              const labels = queryResults.map(row => {
+                // For date dimensions, use month_year field; otherwise use the original dimension
+                const value = aiResponse.dataQuery.dimension.toLowerCase().includes('date') 
+                  ? extractValue(row.month_year) 
+                  : extractValue(row[aiResponse.dataQuery.dimension]);
+                
+                // No need for additional formatting since we're using FORMAT_DATE in SQL for dates
+                return String(value || '');
+              });
+              let dataValues = [];
+              let label = '';
+              
+              switch (aiResponse.dataQuery.type) {
+                case 'count':
+                  dataValues = queryResults.map(row => {
+                    const value = extractValue(row.count);
+                    return parseFloat(value) || 0;
+                  });
+                  label = 'Count';
+                  break;
+                case 'sum':
+                  dataValues = queryResults.map(row => {
+                    const value = extractValue(row.total);
+                    return parseFloat(value) || 0;
+                  });
+                  label = `Sum of ${aiResponse.dataQuery.measure}`;
+                  break;
+                case 'average':
+                  dataValues = queryResults.map(row => {
+                    const value = extractValue(row.average);
+                    return parseFloat(value) || 0;
+                  });
+                  label = `Average of ${aiResponse.dataQuery.measure}`;
+                  break;
+                default:
+                  // For other types, just try to extract numeric values
+                  dataValues = queryResults.map(row => {
+                    const keys = Object.keys(row);
+                    const numericKey = keys.find(key => key !== aiResponse.dataQuery.dimension);
+                    if (numericKey) {
+                      const value = extractValue(row[numericKey]);
+                      return parseFloat(value) || 0;
+                    }
+                    return 0;
+                  });
+                  label = 'Value';
+              }
+              
+              result = {
+                labels: labels,
+                datasets: [{
+                  label: label,
+                  data: dataValues
+                }]
+              };
+            }
+          } else if (queryResults.length > 0) {
+            // Single value result
+            const firstRow = queryResults[0];
+            let value = 0;
+            let label = '';
+            
+            switch (aiResponse.dataQuery.type) {
+              case 'count':
+                value = firstRow.count || 0;
+                label = 'Total Count';
+                break;
+              case 'sum':
+                value = firstRow.total || 0;
+                label = `Total ${aiResponse.dataQuery.measure}`;
+                break;
+              case 'average':
+                value = firstRow.average || 0;
+                label = `Average ${aiResponse.dataQuery.measure}`;
+                break;
+              default:
+                // Use first numeric value found
+                const numericValue = Object.values(firstRow).find(val => typeof val === 'number');
+                value = numericValue || 0;
+                label = 'Value';
+            }
+            
+            result = {
+              labels: ['Total'],
+              datasets: [{
+                label: label,
+                data: [value]
+              }]
+            };
+          }
+          
+          if (result) {
+            chartData = result;
+          }
+          
+        } catch (error) {
+          console.error('Error processing BigQuery data:', error);
+          throw new Error(`Error processing BigQuery data: ${error.message}`);
+        }
       }
     }
 
@@ -698,19 +1246,37 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
     }
 
     // Add default styling to the chart data
-    chartData.datasets[0] = {
-      ...chartData.datasets[0],
-      backgroundColor: 'rgba(54, 162, 235, 0.5)',
-      borderColor: 'rgba(54, 162, 235, 1)',
-      borderWidth: 1
-    };
+    if (chartData.datasets) {
+      const colors = [
+        { bg: 'rgba(54, 162, 235, 0.5)', border: 'rgba(54, 162, 235, 1)' }, // Blue
+        { bg: 'rgba(255, 99, 132, 0.5)', border: 'rgba(255, 99, 132, 1)' }, // Red  
+        { bg: 'rgba(75, 192, 192, 0.5)', border: 'rgba(75, 192, 192, 1)' }, // Green
+        { bg: 'rgba(255, 205, 86, 0.5)', border: 'rgba(255, 205, 86, 1)' }, // Yellow
+        { bg: 'rgba(153, 102, 255, 0.5)', border: 'rgba(153, 102, 255, 1)' }, // Purple
+        { bg: 'rgba(255, 159, 64, 0.5)', border: 'rgba(255, 159, 64, 1)' }  // Orange
+      ];
+      
+      chartData.datasets.forEach((dataset, index) => {
+        const colorIndex = index % colors.length;
+        chartData.datasets[index] = {
+          ...dataset,
+          backgroundColor: colors[colorIndex].bg,
+          borderColor: colors[colorIndex].border,
+          borderWidth: 2,
+          fill: false // Important for line charts
+        };
+      });
+    }
 
-    // Generate SQL query from the data query specification
+    // Generate SQL query from the data query specification (for display purposes)
     let sqlQuery = '';
     if (aiResponse.dataQuery.type === 'count') {
       sqlQuery = 'SELECT COUNT(*)';
       if (aiResponse.dataQuery.dimension) {
         sqlQuery += `, ${aiResponse.dataQuery.dimension}`;
+      }
+      if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+        sqlQuery += `, ${aiResponse.dataQuery.seriesDimension}`;
       }
       sqlQuery += ' FROM data';
     } else if (aiResponse.dataQuery.type === 'sum') {
@@ -718,11 +1284,17 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
       if (aiResponse.dataQuery.dimension) {
         sqlQuery += `, ${aiResponse.dataQuery.dimension}`;
       }
+      if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+        sqlQuery += `, ${aiResponse.dataQuery.seriesDimension}`;
+      }
       sqlQuery += ' FROM data';
     } else if (aiResponse.dataQuery.type === 'average') {
       sqlQuery = `SELECT AVG(${aiResponse.dataQuery.measure})`;
       if (aiResponse.dataQuery.dimension) {
         sqlQuery += `, ${aiResponse.dataQuery.dimension}`;
+      }
+      if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+        sqlQuery += `, ${aiResponse.dataQuery.seriesDimension}`;
       }
       sqlQuery += ' FROM data';
     }
@@ -730,13 +1302,21 @@ For example, if the Excel file has columns ["OrderDate", "Location", "Amount"], 
     // Add WHERE clause if there are filters
     if (aiResponse.dataQuery.filters && aiResponse.dataQuery.filters.length > 0) {
       sqlQuery += ' WHERE ' + aiResponse.dataQuery.filters.map(filter => {
-        return `${filter.column} ${filter.operator} '${filter.value}'`;
+        if (filter.operator === 'IN' && Array.isArray(filter.value)) {
+          const valueList = filter.value.map(val => `'${val}'`).join(', ');
+          return `${filter.column} IN (${valueList})`;
+        } else {
+          return `${filter.column} ${filter.operator} '${filter.value}'`;
+        }
       }).join(' AND ');
     }
 
     // Add GROUP BY if there's a dimension
     if (aiResponse.dataQuery.dimension) {
       sqlQuery += ` GROUP BY ${aiResponse.dataQuery.dimension}`;
+      if (aiResponse.dataQuery.multiSeries && aiResponse.dataQuery.seriesDimension) {
+        sqlQuery += `, ${aiResponse.dataQuery.seriesDimension}`;
+      }
     }
 
     res.json({

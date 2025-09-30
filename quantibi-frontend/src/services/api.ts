@@ -117,7 +117,7 @@ class ApiService {
   }
 
   async testDatabaseConnection(workspaceId: string, databaseData: DatabaseConnectionForm): Promise<{ success: boolean; message: string }> {
-    const response = await this.api.post(`/workspaces/${workspaceId}/databases/test`, databaseData);
+    const response = await this.api.post(`/workspaces/${workspaceId}/databases/test-bigquery`, databaseData);
     return response.data;
   }
 
@@ -131,7 +131,7 @@ class ApiService {
     return response.data;
   }
 
-  async createDataset(workspaceId: string, datasetData: Partial<Dataset>): Promise<Dataset> {
+  async createDataset(workspaceId: string, datasetData: import('../types').DatasetCreate): Promise<Dataset> {
     const response = await this.api.post(`/workspaces/${workspaceId}/datasets`, datasetData);
     return response.data;
   }
@@ -178,7 +178,7 @@ class ApiService {
 
   // AI Chart Generation
   async generateChartWithAI(workspaceId: string, aiRequest: AIChartRequest): Promise<AIChartResponse> {
-    const response = await this.api.post(`/workspaces/${workspaceId}/charts/generate`, aiRequest);
+    const response = await this.api.post(`/workspaces/${workspaceId}/charts/ai/generate`, aiRequest);
     return response.data;
   }
 

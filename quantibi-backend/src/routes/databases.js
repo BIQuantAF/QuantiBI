@@ -1,4 +1,16 @@
+
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const xlsx = require('xlsx');
+const { authenticateUser } = require('../middleware/auth');
+const Database = require('../models/Database');
+const Workspace = require('../models/Workspace');
+const Dataset = require('../models/Dataset');
 const bigqueryService = require('../services/bigquery');
+
 /**
  * @route   POST /api/workspaces/:workspaceId/databases/test-bigquery
  * @desc    Test Google BigQuery connection
@@ -16,16 +28,44 @@ router.post('/:workspaceId/databases/test-bigquery', authenticateUser, async (re
     res.status(500).json({ message: error.message });
   }
 });
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const xlsx = require('xlsx');
-const { authenticateUser } = require('../middleware/auth');
-const Database = require('../models/Database');
-const Workspace = require('../models/Workspace');
-const Dataset = require('../models/Dataset');
+
+/**
+ * @route   POST /api/workspaces/:workspaceId/databases/bigquery-datasets
+ * @desc    List available BigQuery datasets and tables for debugging
+ * @access  Private
+ */
+router.post('/:workspaceId/databases/bigquery-datasets', authenticateUser, async (req, res) => {
+  try {
+    const { projectId, credentials } = req.body;
+    if (!projectId || !credentials) {
+      return res.status(400).json({ message: 'Missing projectId or credentials' });
+    }
+    
+    const datasets = await bigqueryService.listDatasets(projectId, credentials);
+    const result = { datasets: [] };
+    
+    // For each dataset, list its tables
+    for (const dataset of datasets) {
+      try {
+        const tables = await bigqueryService.listTables(projectId, credentials, dataset);
+        result.datasets.push({
+          dataset: dataset,
+          tables: tables
+        });
+      } catch (error) {
+        result.datasets.push({
+          dataset: dataset,
+          tables: [],
+          error: error.message
+        });
+      }
+    }
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
