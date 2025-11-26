@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import apiService from '../../services/api';
 import { Report } from '../../types/index';
@@ -11,12 +11,7 @@ const PublicReportPage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const reportRef = React.useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!shareToken) return;
-    fetchReport();
-  }, [shareToken]);
-
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     try {
       const data = await apiService.getPublicReport(shareToken!);
       setReport(data);
@@ -27,7 +22,12 @@ const PublicReportPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [shareToken]);
+
+  useEffect(() => {
+    if (!shareToken) return;
+    fetchReport();
+  }, [shareToken, fetchReport]);
 
   const exportToPDF = async () => {
     if (!reportRef.current || !report) return;

@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { Dashboard } from '../../types';
 import { apiService } from '../../services/api';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import DashboardEditor from './DashboardEditor';
 import { Link } from 'react-router-dom';
 
 const Dashboards: React.FC = () => {
@@ -15,7 +14,6 @@ const Dashboards: React.FC = () => {
   const [newDashboardName, setNewDashboardName] = useState('');
   const [newDashboardDescription, setNewDashboardDescription] = useState('');
   const [editingDashboard, setEditingDashboard] = useState<Dashboard | null>(null);
-  const [managingChartsDashboard, setManagingChartsDashboard] = useState<Dashboard | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 

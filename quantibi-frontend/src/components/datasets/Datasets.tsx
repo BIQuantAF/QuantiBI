@@ -18,8 +18,6 @@ const Datasets: React.FC = () => {
   });
   const [datasetSubmitting, setDatasetSubmitting] = useState(false);
   const [datasetError, setDatasetError] = useState<string | null>(null);
-  // Fetch datasets for the workspace (for future: display list, refresh, etc.)
-  const [datasets, setDatasets] = useState<any[]>([]);
   
   // Modal state for viewing datasets
   const [showDatasetsModal, setShowDatasetsModal] = useState(false);
@@ -36,9 +34,8 @@ const Datasets: React.FC = () => {
   const fetchDatasets = useCallback(async () => {
     if (!currentWorkspace) return;
     try {
-      const ds = await apiService.getDatasets(currentWorkspace._id);
+      await apiService.getDatasets(currentWorkspace._id);
       // Future: Could use ds for displaying all datasets in workspace
-      setDatasets(ds);
     } catch (err) {
       // ignore for now
     }
@@ -122,7 +119,7 @@ const Datasets: React.FC = () => {
 
   // Handle confirmed delete
   const handleConfirmedDelete = async () => {
-    const { datasetId, datasetName } = confirmDelete;
+    const datasetId = confirmDelete.datasetId;
     setDeletingDatasetId(datasetId);
     setConfirmDelete({ show: false, datasetId: '', datasetName: '' });
     

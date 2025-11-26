@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import apiService from '../../services/api';
-import { Report, ReportSection } from '../../types/index';
+import { apiService } from '../../services/api';
+import { Report } from '../../types';
 
 const ReportPage: React.FC = () => {
   const { workspaceId, reportId } = useParams<{ workspaceId: string; reportId: string }>();
@@ -11,14 +11,7 @@ const ReportPage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const reportRef = React.useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!workspaceId || !reportId) return;
-    fetchReport();
-    const interval = setInterval(fetchReport, 3000);
-    return () => clearInterval(interval);
-  }, [reportId, workspaceId]);
-
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     try {
       const data = await apiService.getReport(workspaceId!, reportId!);
       setReport(data);
@@ -29,7 +22,14 @@ const ReportPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId, reportId]);
+
+  useEffect(() => {
+    if (!workspaceId || !reportId) return;
+    fetchReport();
+    const interval = setInterval(fetchReport, 3000);
+    return () => clearInterval(interval);
+  }, [reportId, workspaceId, fetchReport]);
 
   const exportToPDF = async () => {
     if (!reportRef.current || !report) return;

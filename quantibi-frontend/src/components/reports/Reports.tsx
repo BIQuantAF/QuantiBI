@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
 import { Report, Dataset } from '../../types/index';
@@ -11,12 +11,7 @@ const Reports: React.FC = () => {
   const [error, setError] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  useEffect(() => {
-    if (!workspaceId) return;
-    fetchReports();
-  }, [workspaceId]);
-
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     try {
       setLoading(true);
       const data = await apiService.getReports(workspaceId!);
@@ -28,7 +23,12 @@ const Reports: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    fetchReports();
+  }, [workspaceId, fetchReports]);
 
   const handleDeleteReport = async (reportId: string) => {
     if (!window.confirm('Are you sure you want to delete this report?')) return;
@@ -151,11 +151,7 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchDatasets();
-  }, [workspaceId]);
-
-  const fetchDatasets = async () => {
+  const fetchDatasets = useCallback(async () => {
     try {
       const data = await apiService.getDatasets(workspaceId);
       setDatasets(data);
@@ -165,7 +161,11 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    fetchDatasets();
+  }, [fetchDatasets]);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
