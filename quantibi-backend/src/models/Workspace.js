@@ -14,6 +14,31 @@ const workspaceSchema = new mongoose.Schema({
     type: String, // Firebase UID
     required: true,
   },
+  // Simple plan and usage tracking for single-user free/pro model
+  plan: {
+    type: String,
+    enum: ['free', 'pro'],
+    default: 'free',
+  },
+  usage: {
+    uploads: {
+      type: Number,
+      default: 0,
+    },
+    charts: {
+      type: Number,
+      default: 0,
+    },
+    reports: {
+      type: Number,
+      default: 0,
+    },
+  },
+  // Optional payment subscription id (e.g. Stripe subscription)
+  subscriptionId: {
+    type: String,
+    default: null,
+  },
   members: [
     {
       uid: {

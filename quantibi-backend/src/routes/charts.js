@@ -10,7 +10,10 @@ const xlsx = require('xlsx');
 const fs = require('fs');
 const Database = require('../models/Database');
 const bigqueryService = require('../services/bigquery');
-const csv = require('csv-parse/sync'); // Added for CSV parsing
+const usageService = require('../services/usage');
+const csv = require('csv-parse/sync');
+const s3Service = require('../services/s3');
+const duckdbService = require('../services/duckdb');
 
 /**
  * @route   GET /api/workspaces/:workspaceId/charts/:chartId
@@ -221,6 +224,17 @@ router.post('/:workspaceId/charts/ai/generate', authenticateUser, async (req, re
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Enforce chart generation limits for free users
+    try {
+      const consume = await usageService.tryConsume(req.user.uid, 'charts');
+      if (!consume.success) {
+        return res.status(403).json({ code: 'PAYWALL', message: consume.message, upgradeUrl: process.env.UPGRADE_URL || null });
+      }
+    } catch (err) {
+      console.error('Error checking chart usage limits:', err);
+      return res.status(500).json({ message: 'Error checking usage limits' });
+    }
+
     const { query, dataset } = req.body;
 
     if (!dataset) {
@@ -319,47 +333,73 @@ router.post('/:workspaceId/charts/ai/generate', authenticateUser, async (req, re
       }
     }
 
-    // For Excel files, read the data and column information
-    if (datasetObj.database.type === 'XLS') {
-      console.log('Reading Excel file:', datasetObj.database.filePath);
+    // For file-based databases (CSV, XLS), read from S3 or local file using DuckDB
+    if (datasetObj.database.type === 'XLS' || datasetObj.database.type === 'CSV') {
+      console.log('Reading file database:', { type: datasetObj.database.type, s3Url: datasetObj.database.s3Url });
       
-      if (!datasetObj.database.filePath) {
-        return res.status(400).json({ 
-          message: 'Dataset file path is missing. Please recreate the dataset from the database connection.' 
-        });
-      }
+      let filePath = null;
       
       try {
-        const workbook = xlsx.readFile(datasetObj.database.filePath);
-        const worksheet = workbook.Sheets[datasetObj.database.sheetName || workbook.SheetNames[0]];
-        const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-      
-      // Get headers from first row
-      const headers = data[0];
-      
-      // Only include the first 5 rows of data for the prompt
-      const sampleData = data.slice(1, 6).map(row => {
-        const obj = {};
-        headers.forEach((header, index) => {
-          obj[header] = row[index];
+        // Use S3 if available, otherwise fall back to local file path
+        if (datasetObj.database.s3Url && datasetObj.database.s3Key) {
+          console.log('Downloading file from S3:', datasetObj.database.s3Url);
+          filePath = await s3Service.downloadFileToTemp(datasetObj.database.s3Key, datasetObj.database.s3Bucket);
+        } else if (datasetObj.database.filePath) {
+          console.log('Using local file path:', datasetObj.database.filePath);
+          filePath = datasetObj.database.filePath;
+        } else {
+          return res.status(400).json({ 
+            message: 'Dataset file is missing. Please recreate the dataset from the database connection.' 
+          });
+        }
+        
+        if (!fs.existsSync(filePath)) {
+          return res.status(400).json({ 
+            message: 'Dataset file not found.' 
+          });
+        }
+        
+        // Detect schema using DuckDB
+        const schema = await duckdbService.detectSchema(filePath);
+        const columns = schema.map(col => col.name);
+        
+        // Get sample data using DuckDB
+        const sampleResult = await duckdbService.getSampleData(filePath, 5);
+        const sampleData = [];
+        for (let i = 0; i < (sampleResult.rows || []).length; i++) {
+          const row = {};
+          columns.forEach((col, idx) => {
+            row[col] = sampleResult.rows[i][idx];
+          });
+          sampleData.push(row);
+        }
+        
+        datasetDetails[0].database = {
+          ...datasetDetails[0].database,
+          columns: columns,
+          sampleData: sampleData,
+          totalRows: sampleResult.totalRows || 0
+        };
+        
+        console.log('File data loaded via DuckDB:', {
+          rowCount: sampleResult.totalRows,
+          columns: columns,
+          type: datasetObj.database.type
         });
-        return obj;
-      });
-
-      datasetDetails[0].database = {
-        ...datasetDetails[0].database,
-        columns: headers,
-        sampleData: sampleData,
-        totalRows: data.length - 1 // Exclude header row
-      };
-      console.log('Excel data loaded:', {
-        rowCount: data.length - 1,
-        columns: headers
-      });
+        
+        // Clean up temporary S3 file if it was downloaded
+        if (datasetObj.database.s3Url && filePath) {
+          try {
+            await s3Service.cleanupLocalFile(filePath);
+          } catch (err) {
+            console.warn('Failed to clean up temp file:', err);
+          }
+        }
       } catch (error) {
-        console.error('Error reading Excel file:', error);
+        console.error('Error reading file:', error);
         return res.status(500).json({ 
-          message: 'Error reading the Excel file. Please check if the file exists and is accessible.' 
+          message: 'Error reading the file. Please check if the file exists and is accessible.',
+          error: error.message
         });
       }
     }

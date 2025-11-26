@@ -101,16 +101,28 @@ const Charts: React.FC = () => {
     );
   }
 
+  const handleGenerateReport = () => {
+    navigate(`/workspace/${workspaceId}/reports`);
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Charts</h1>
-        <button
-          onClick={handleCreateChart}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          Create Chart
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleGenerateReport}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            Generate Report
+          </button>
+          <button
+            onClick={handleCreateChart}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Create Chart
+          </button>
+        </div>
       </div>
 
       {error && (

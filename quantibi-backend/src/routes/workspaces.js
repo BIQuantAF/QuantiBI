@@ -39,6 +39,18 @@ router.post('/', authenticateUser, async (req, res) => {
       return res.status(400).json({ message: 'Workspace name is required' });
     }
 
+    // Enforce workspace creation limits
+    try {
+      const usageService = require('../services/usage');
+      const consume = await usageService.tryConsume(req.user.uid, 'workspaces');
+      if (!consume.success) {
+        return res.status(403).json({ code: 'PAYWALL', message: consume.message, upgradeUrl: process.env.UPGRADE_URL || null });
+      }
+    } catch (err) {
+      console.error('Error checking workspace usage limits:', err);
+      return res.status(500).json({ message: 'Error checking usage limits' });
+    }
+
     const workspace = new Workspace({
       name,
       description,

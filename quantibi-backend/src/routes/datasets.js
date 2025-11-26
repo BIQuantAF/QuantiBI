@@ -5,6 +5,9 @@ const Dataset = require('../models/Dataset');
 const Workspace = require('../models/Workspace');
 const Database = require('../models/Database');
 const bigqueryService = require('../services/bigquery');
+const s3Service = require('../services/s3');
+const duckdbService = require('../services/duckdb');
+const fs = require('fs');
 
 /**
  * @route   GET /api/workspaces/:workspaceId/datasets
@@ -285,6 +288,150 @@ router.get('/:workspaceId/databases/:databaseId/tables', authenticateUser, async
     }
   } catch (error) {
     console.error('Error fetching tables:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route   GET /api/workspaces/:workspaceId/databases/:databaseId/schema
+ * @desc    Get the schema (column information) for a file-based database using DuckDB
+ * @access  Private
+ */
+router.get('/:workspaceId/databases/:databaseId/schema', authenticateUser, async (req, res) => {
+  try {
+    const workspace = await Workspace.findById(req.params.workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const database = await Database.findById(req.params.databaseId);
+    if (!database) {
+      return res.status(404).json({ message: 'Database not found' });
+    }
+
+    // Schema detection only works for file-based databases
+    if (database.type !== 'XLS' && database.type !== 'CSV') {
+      return res.status(400).json({ message: 'Schema detection only available for CSV and Excel files' });
+    }
+
+    let filePath = null;
+    
+    try {
+      // Use S3 if available, otherwise fall back to local file path
+      if (database.s3Url && database.s3Key) {
+        console.log('Downloading file from S3 for schema detection:', database.s3Url);
+        filePath = await s3Service.downloadFileToTemp(database.s3Key, database.s3Bucket);
+      } else if (database.filePath) {
+        console.log('Using local file path for schema detection:', database.filePath);
+        filePath = database.filePath;
+      } else {
+        return res.status(400).json({ message: 'No file path or S3 URL found for this database' });
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(400).json({ message: 'File not found' });
+      }
+
+      // Detect schema using DuckDB
+      const schema = await duckdbService.detectSchema(filePath);
+      
+      // Clean up temp file if it was downloaded from S3
+      if (database.s3Url && filePath) {
+        try {
+          await s3Service.cleanupLocalFile(filePath);
+        } catch (err) {
+          console.warn('Failed to clean up temp file:', err);
+        }
+      }
+
+      res.json(schema);
+    } catch (error) {
+      console.error('Error detecting schema:', error);
+      res.status(500).json({ message: 'Failed to detect schema', error: error.message });
+    }
+  } catch (error) {
+    console.error('Error fetching schema:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route   GET /api/workspaces/:workspaceId/databases/:databaseId/preview
+ * @desc    Get sample data from a file-based database using DuckDB
+ * @access  Private
+ */
+router.get('/:workspaceId/databases/:databaseId/preview', authenticateUser, async (req, res) => {
+  try {
+    const workspace = await Workspace.findById(req.params.workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+
+    // Check if user has access to this workspace
+    const isMember = workspace.owner === req.user.uid || 
+                    workspace.members.some(member => member.uid === req.user.uid);
+    
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const database = await Database.findById(req.params.databaseId);
+    if (!database) {
+      return res.status(404).json({ message: 'Database not found' });
+    }
+
+    // Preview only works for file-based databases
+    if (database.type !== 'XLS' && database.type !== 'CSV') {
+      return res.status(400).json({ message: 'Preview only available for CSV and Excel files' });
+    }
+
+    const limit = parseInt(req.query.limit) || 10;
+
+    let filePath = null;
+    
+    try {
+      // Use S3 if available, otherwise fall back to local file path
+      if (database.s3Url && database.s3Key) {
+        console.log('Downloading file from S3 for preview:', database.s3Url);
+        filePath = await s3Service.downloadFileToTemp(database.s3Key, database.s3Bucket);
+      } else if (database.filePath) {
+        console.log('Using local file path for preview:', database.filePath);
+        filePath = database.filePath;
+      } else {
+        return res.status(400).json({ message: 'No file path or S3 URL found for this database' });
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(400).json({ message: 'File not found' });
+      }
+
+      // Get sample data using DuckDB
+      const sampleData = await duckdbService.getSampleData(filePath, limit);
+      
+      // Clean up temp file if it was downloaded from S3
+      if (database.s3Url && filePath) {
+        try {
+          await s3Service.cleanupLocalFile(filePath);
+        } catch (err) {
+          console.warn('Failed to clean up temp file:', err);
+        }
+      }
+
+      res.json(sampleData);
+    } catch (error) {
+      console.error('Error getting preview data:', error);
+      res.status(500).json({ message: 'Failed to get preview data', error: error.message });
+    }
+  } catch (error) {
+    console.error('Error fetching preview:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

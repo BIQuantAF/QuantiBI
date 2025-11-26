@@ -10,6 +10,7 @@ import Charts from './components/charts/Charts';
 import CreateChart from './components/charts/CreateChart';
 import Dashboards from './components/dashboards/Dashboards';
 import DashboardView from './components/dashboards/DashboardView';
+import Reports from './components/reports/Reports';
 import WorkspaceSettings from './components/workspace/WorkspaceSettings';
 import Navigation from './components/common/Navigation';
 import EditChart from './components/charts/EditChart';
@@ -17,6 +18,7 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
 import './App.css';
+import UpgradeModal from './components/common/UpgradeModal';
 
 console.log('🚀 App.tsx: This file is being executed!');
 console.log('🚀 App.tsx: React version:', React.version);
@@ -29,6 +31,7 @@ const App: React.FC = () => {
       <WorkspaceProvider>
         <Router>
           <div className="App min-h-screen bg-gray-50">
+            <UpgradeModal />
             <Routes>
               {/* Auth Routes */}
               <Route path="/login" element={<Login />} />
@@ -97,6 +100,14 @@ const App: React.FC = () => {
                   <div>
                     <Navigation />
                     <DashboardView />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/workspace/:workspaceId/reports" element={
+                <ProtectedRoute>
+                  <div>
+                    <Navigation />
+                    <Reports />
                   </div>
                 </ProtectedRoute>
               } />

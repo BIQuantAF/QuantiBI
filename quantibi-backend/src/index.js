@@ -5,13 +5,14 @@ const dotenv = require('dotenv');
 const createError = require('http-errors');
 const mongoose = require('mongoose');
 
-// Routes
+// Routes (require after dotenv.config below so env vars are available to modules)
 const userRoutes = require('./routes/users');
 const workspaceRoutes = require('./routes/workspaces');
 const databaseRoutes = require('./routes/databases');
 const datasetRoutes = require('./routes/datasets');
 const chartRoutes = require('./routes/charts');
 const dashboardRoutes = require('./routes/dashboards');
+const reportRoutes = require('./routes/reports');
 
 // Load environment variables
 dotenv.config();
@@ -61,6 +62,25 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Mount Stripe webhook route BEFORE the JSON body parser so Stripe signature
+// verification can access the raw request body. The handler is exported from
+// the payments route module as `webhookHandler`.
+let paymentRoutes;
+try {
+  paymentRoutes = require('./routes/payments');
+  console.log('Payments module loaded:', !!paymentRoutes);
+  console.log('webhookHandler export exists:', !!(paymentRoutes && paymentRoutes.webhookHandler));
+  if (paymentRoutes && paymentRoutes.webhookHandler) {
+    app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), paymentRoutes.webhookHandler);
+    console.log('✓ Mounted Stripe webhook handler at /api/payments/webhook (raw body)');
+  } else {
+    console.warn('✗ paymentRoutes or webhookHandler not found. paymentRoutes keys:', paymentRoutes ? Object.keys(paymentRoutes) : 'null');
+  }
+} catch (err) {
+  console.warn('✗ Failed to mount Stripe webhook handler early:', err && err.message);
+}
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -96,6 +116,14 @@ app.use('/api/workspaces', databaseRoutes);
 app.use('/api/workspaces', datasetRoutes);
 app.use('/api/workspaces', chartRoutes);
 app.use('/api/workspaces', dashboardRoutes);
+app.use('/api/workspaces', reportRoutes);
+// Payments (not workspace scoped)
+if (paymentRoutes) {
+  app.use('/api/payments', paymentRoutes);
+  console.log('Mounted payment routes at /api/payments');
+} else {
+  console.warn('paymentRoutes is undefined; payment routes not mounted');
+}
 
 // Error handling
 app.use((req, res, next) => {

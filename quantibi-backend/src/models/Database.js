@@ -39,6 +39,12 @@ const databaseSchema = new mongoose.Schema({
   filePath: String,
   fileType: String,
   
+  // S3 fields (new)
+  s3Key: String,
+  s3Bucket: String,
+  s3Url: String,
+  fileSize: Number,
+  
   // Metadata
   createdAt: {
     type: Date,

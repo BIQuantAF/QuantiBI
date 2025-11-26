@@ -46,10 +46,21 @@ class ApiService {
     this.api.interceptors.response.use(
       (response: AxiosResponse) => response,
       (error) => {
-        if (error.response?.status === 401) {
-          // Handle unauthorized access
-          auth.signOut();
-          window.location.href = '/login';
+        if (error.response) {
+          if (error.response.status === 401) {
+            // Handle unauthorized access
+            auth.signOut();
+            window.location.href = '/login';
+          }
+          // Handle paywall signal from backend
+          if (error.response.status === 403 && error.response.data?.code === 'PAYWALL') {
+            try {
+              const event = new CustomEvent('quantibi:paywall', { detail: error.response.data });
+              window.dispatchEvent(event as Event);
+            } catch (e) {
+              console.warn('Failed to dispatch paywall event', e);
+            }
+          }
         }
         return Promise.reject(error);
       }
@@ -206,6 +217,26 @@ class ApiService {
     await this.api.delete(`/workspaces/${workspaceId}/dashboards/${dashboardId}`);
   }
 
+  // Report APIs
+  async getReports(workspaceId: string): Promise<any[]> {
+    const response = await this.api.get(`/workspaces/${workspaceId}/reports`);
+    return response.data;
+  }
+
+  async getReport(workspaceId: string, reportId: string): Promise<any> {
+    const response = await this.api.get(`/workspaces/${workspaceId}/reports/${reportId}`);
+    return response.data;
+  }
+
+  async createReport(workspaceId: string, reportData: { title: string; description?: string; chartIds: string[] }): Promise<any> {
+    const response = await this.api.post(`/workspaces/${workspaceId}/reports`, reportData);
+    return response.data;
+  }
+
+  async deleteReport(workspaceId: string, reportId: string): Promise<void> {
+    await this.api.delete(`/workspaces/${workspaceId}/reports/${reportId}`);
+  }
+
   // File Upload
   async uploadFile(workspaceId: string, file: File): Promise<{ filePath: string; fileName: string }> {
     const formData = new FormData();
@@ -216,6 +247,11 @@ class ApiService {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  }
+
+  async createCheckoutSession(priceId: string): Promise<{ url: string }> {
+    const response = await this.api.post('/payments/create-checkout-session', { priceId });
     return response.data;
   }
 

@@ -10,6 +10,9 @@ const Database = require('../models/Database');
 const Workspace = require('../models/Workspace');
 const Dataset = require('../models/Dataset');
 const bigqueryService = require('../services/bigquery');
+const usageService = require('../services/usage');
+const s3Service = require('../services/s3');
+const duckdbService = require('../services/duckdb');
 
 /**
  * @route   POST /api/workspaces/:workspaceId/databases/test-bigquery
@@ -67,22 +70,9 @@ router.post('/:workspaceId/databases/bigquery-datasets', authenticateUser, async
   }
 });
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../../uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage: storage });
+// Configure multer for temporary file uploads (will be uploaded to S3)
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage, limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB limit
 
 /**
  * @route   POST /api/workspaces/:workspaceId/databases
@@ -113,6 +103,17 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Enforce upload limits (free tier)
+    try {
+      const consume = await usageService.tryConsume(req.user.uid, 'uploads');
+      if (!consume.success) {
+        return res.status(403).json({ code: 'PAYWALL', message: consume.message, upgradeUrl: process.env.UPGRADE_URL || null });
+      }
+    } catch (err) {
+      console.error('Error checking usage limits:', err);
+      return res.status(500).json({ message: 'Error checking usage limits' });
+    }
+
     const {
       type,
       name,
@@ -141,20 +142,49 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
       });
     }
 
-    // Handle file uploads
-    let filePath = null;
-    let fileType = null;
+    // Handle file uploads to S3
+    let s3Key = null;
+    let s3Url = null;
+    let fileSize = null;
+    let localFilePath = null;
     console.log('File upload debug:', {
       hasFile: !!req.file,
-      file: req.file,
-      hasFiles: !!req.files,
-      files: req.files
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+      hasBuffer: !!req.file?.buffer
     });
     
     if (req.file) {
-      filePath = req.file.path;
-      fileType = req.file.mimetype;
-      console.log('File uploaded:', { filePath, fileType });
+      try {
+        // Save file to local temp directory first for processing
+        const uploadDir = path.join(__dirname, '../../uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        
+        localFilePath = path.join(uploadDir, `${Date.now()}-${req.file.originalname}`);
+        fs.writeFileSync(localFilePath, req.file.buffer);
+        
+        // Upload to S3
+        const s3UploadResult = await s3Service.uploadFile(
+          localFilePath,
+          req.user.uid,
+          req.file.originalname
+        );
+        
+        s3Key = s3UploadResult.s3Key;
+        s3Url = s3UploadResult.s3Url;
+        fileSize = req.file.size;
+        
+        console.log('File uploaded to S3:', { s3Key, s3Url, fileSize });
+      } catch (uploadError) {
+        console.error('Error uploading to S3:', uploadError);
+        // Clean up local file if S3 upload fails
+        if (localFilePath && fs.existsSync(localFilePath)) {
+          fs.unlinkSync(localFilePath);
+        }
+        return res.status(500).json({ message: 'Failed to upload file to S3', error: uploadError.message });
+      }
     } else {
       console.log('No file uploaded - req.file is null');
     }
@@ -182,20 +212,49 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
       credentials: finalCredentials,
       spreadsheetUrl,
       sheetName,
-      filePath,
-      fileType
+      s3Key,
+      s3Bucket: process.env.S3_BUCKET_NAME,
+      s3Url,
+      fileSize
     });
 
     console.log('Creating database:', database);
     await database.save();
     console.log('Database created successfully');
+    
+    // Clean up local temporary file
+    if (localFilePath && fs.existsSync(localFilePath)) {
+      try {
+        fs.unlinkSync(localFilePath);
+        console.log('Cleaned up temporary local file');
+      } catch (err) {
+        console.warn('Failed to clean up temporary file:', err);
+      }
+    }
 
-    // Automatically create a dataset for file-based databases
+    // Automatically create a dataset for file-based databases and detect schema
     if (type === 'XLS' || type === 'CSV') {
       try {
+        // Detect schema using DuckDB
+        let schema = [];
+        if (s3Url) {
+          console.log('Detecting schema from S3 file:', s3Url);
+          try {
+            // Download file from S3 temporarily for schema detection
+            const tempPath = await s3Service.downloadFileToTemp(s3Key, process.env.S3_BUCKET_NAME);
+            schema = await duckdbService.detectSchema(tempPath);
+            
+            // Clean up temp file
+            await s3Service.cleanupLocalFile(tempPath);
+            console.log('Schema detected:', schema);
+          } catch (schemaError) {
+            console.warn('Could not detect schema:', schemaError.message);
+          }
+        }
+        
         const dataset = new Dataset({
           workspace: workspace._id,
-          name: displayName,
+          name: name,
           type: 'Physical',
           database: database._id,
           schema: type === 'XLS' ? (sheetName || 'Sheet1') : 'default',
