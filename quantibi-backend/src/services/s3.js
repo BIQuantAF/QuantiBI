@@ -23,13 +23,24 @@ const FILES_FOLDER = process.env.S3_FILES_FOLDER || 'files/';
 
 /**
  * Upload file to S3
- * @param {Buffer} fileBuffer - File content
+ * @param {Buffer|string} fileContent - File content (buffer or file path)
  * @param {string} originalFileName - Original filename
  * @param {string} workspaceId - Workspace ID for organization
- * @returns {Promise<{key: string, url: string, size: number}>}
+ * @returns {Promise<{s3Key: string, s3Url: string, size: number}>}
  */
-async function uploadFile(fileBuffer, originalFileName, workspaceId) {
+async function uploadFile(fileContent, originalFileName, workspaceId) {
   try {
+    let fileBuffer = fileContent;
+    let fileSize = 0;
+    
+    // If it's a file path, read it; if it's already a buffer, use it
+    if (typeof fileContent === 'string') {
+      fileBuffer = fs.readFileSync(fileContent);
+      fileSize = fs.statSync(fileContent).size;
+    } else {
+      fileSize = fileBuffer.length;
+    }
+
     // Generate unique key
     const ext = path.extname(originalFileName);
     const timestamp = Date.now();
@@ -52,9 +63,12 @@ async function uploadFile(fileBuffer, originalFileName, workspaceId) {
 
     console.log(`✅ File uploaded to S3: ${key}`);
 
+    const s3Url = `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`;
+
     return {
-      key,
-      size: fileBuffer.length,
+      s3Key: key,
+      s3Url: s3Url,
+      size: fileSize,
       originalFileName,
     };
   } catch (error) {
@@ -66,18 +80,21 @@ async function uploadFile(fileBuffer, originalFileName, workspaceId) {
 /**
  * Download file from S3 to local temp directory
  * @param {string} s3Key - S3 object key
- * @param {string} tempDir - Local temp directory path
+ * @param {string} bucketName - S3 bucket name (optional, uses default if not provided)
  * @returns {Promise<string>} - Local file path
  */
-async function downloadFileToTemp(s3Key, tempDir) {
+async function downloadFileToTemp(s3Key, bucketName) {
   try {
+    const bucket = bucketName || BUCKET_NAME;
+    const tempDir = path.join(__dirname, '../../uploads');
+    
     // Ensure temp directory exists
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
     const params = {
-      Bucket: BUCKET_NAME,
+      Bucket: bucket,
       Key: s3Key,
     };
 
@@ -85,7 +102,7 @@ async function downloadFileToTemp(s3Key, tempDir) {
     const fileContent = await response.Body.transformToByteArray();
 
     const fileName = path.basename(s3Key);
-    const localPath = path.join(tempDir, fileName);
+    const localPath = path.join(tempDir, `${Date.now()}-${fileName}`);
 
     fs.writeFileSync(localPath, fileContent);
     console.log(`✅ File downloaded from S3: ${localPath}`);
@@ -193,17 +210,31 @@ async function listFilesInWorkspace(workspaceId) {
 
 /**
  * Clean up temp files locally (after processing with DuckDB)
+ * Handles file locks from DuckDB with retry logic
  * @param {string} filePath - Local file path to delete
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function cleanupLocalFile(filePath) {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log(`✅ Temp file cleaned up: ${filePath}`);
+async function cleanupLocalFile(filePath) {
+  const maxRetries = 3;
+  const delayMs = 100;
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`✅ Temp file cleaned up: ${filePath}`);
+        return;
+      }
+    } catch (error) {
+      if (error.code === 'EBUSY' && i < maxRetries - 1) {
+        // File is busy (DuckDB still has it open), retry after delay
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      // Log the error but don't throw - cleanup failure shouldn't break the request
+      console.warn(`⚠️  Failed to cleanup temp file after ${i + 1} attempt(s): ${error.message}`);
+      return;
     }
-  } catch (error) {
-    console.error('⚠️  Failed to cleanup temp file:', error);
   }
 }
 

@@ -165,16 +165,16 @@ router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), 
         localFilePath = path.join(uploadDir, `${Date.now()}-${req.file.originalname}`);
         fs.writeFileSync(localFilePath, req.file.buffer);
         
-        // Upload to S3
+        // Upload to S3 (pass the file buffer directly)
         const s3UploadResult = await s3Service.uploadFile(
-          localFilePath,
-          req.user.uid,
-          req.file.originalname
+          req.file.buffer,
+          req.file.originalname,
+          req.params.workspaceId
         );
         
         s3Key = s3UploadResult.s3Key;
         s3Url = s3UploadResult.s3Url;
-        fileSize = req.file.size;
+        fileSize = s3UploadResult.size;
         
         console.log('File uploaded to S3:', { s3Key, s3Url, fileSize });
       } catch (uploadError) {

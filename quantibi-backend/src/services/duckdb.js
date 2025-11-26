@@ -78,39 +78,86 @@ async function detectSchema(filePath) {
       const ext = path.extname(filePath).toLowerCase();
       const conn = getConnection().connect();
       
-      let describeQuery = '';
+      // Convert Windows backslashes to forward slashes for SQL
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      
+      let readQuery = '';
       if (ext === '.csv') {
-        describeQuery = `DESCRIBE read_csv_auto('${filePath.replace(/\\/g, '\\\\')}')`;
+        // Use read_csv_auto with ignore_errors=true to handle encoding issues and malformed rows
+        // encoding detection will auto-detect UTF-8, UTF-16, Latin1, etc.
+        readQuery = `SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=false) LIMIT 1`;
       } else if (['.parquet', '.pq'].includes(ext)) {
-        describeQuery = `DESCRIBE read_parquet('${filePath.replace(/\\/g, '\\\\')}')`;
+        readQuery = `SELECT * FROM read_parquet('${normalizedPath}') LIMIT 1`;
       } else if (ext === '.json') {
-        describeQuery = `DESCRIBE read_json_auto('${filePath.replace(/\\/g, '\\\\')}')`;
+        readQuery = `SELECT * FROM read_json_auto('${normalizedPath}') LIMIT 1`;
       } else {
         conn.close();
         return reject(new Error(`Unsupported file format: ${ext}`));
       }
       
-      conn.all(describeQuery, (err, result) => {
-        conn.close();
+      conn.all(readQuery, (err, result) => {
         if (err) {
-          console.error('❌ Schema detection error:', err);
-          return reject(new Error(`Failed to detect schema: ${err.message}`));
+          conn.close();
+          console.error('❌ Schema detection error (attempt 1):', err.message.split('\n')[0]);
+          
+          // If first attempt fails and it's a CSV, try with more aggressive settings
+          if (ext === '.csv' && err.message.includes('unicode')) {
+            console.log('🔄 Retrying with fallback encoding settings...');
+            
+            // Try with all_varchar=true to treat all columns as text (no type inference)
+            const fallbackQuery = `SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=true) LIMIT 1`;
+            
+            conn.all(fallbackQuery, (retryErr, retryResult) => {
+              if (retryErr) {
+                conn.close();
+                console.error('❌ Schema detection error (fallback):', retryErr.message.split('\n')[0]);
+                return reject(new Error(`Failed to detect schema: ${retryErr.message.split('\n')[0]}`));
+              }
+              
+              // Process retry result
+              processSchemaResult(retryResult, conn, resolve);
+            });
+            return;
+          }
+          
+          return reject(new Error(`Failed to detect schema: ${err.message.split('\n')[0]}`));
         }
         
-        // Convert DuckDB schema to {name, type} format
-        const schema = result.map(row => ({
-          name: row.column_name,
-          type: row.column_type
-        }));
-        
-        console.log(`✅ Schema detected: ${schema.length} columns`);
-        resolve(schema);
+        processSchemaResult(result, conn, resolve);
       });
     } catch (error) {
       console.error('❌ Schema detection error:', error);
       reject(new Error(`Failed to detect schema: ${error.message}`));
     }
   });
+}
+
+/**
+ * Helper function to process schema detection results
+ */
+function processSchemaResult(result, conn, resolve) {
+  // Get column info from the query result
+  if (!result || result.length === 0) {
+    conn.close();
+    const schema = [];
+    console.log('✅ Schema detected: 0 columns (empty file)');
+    return resolve(schema);
+  }
+  
+  // Extract schema from first row
+  const firstRow = result[0];
+  const schema = Object.entries(firstRow).map(([name, value]) => ({
+    name,
+    type: typeof value === 'bigint' ? 'BIGINT' : 
+           typeof value === 'number' ? (Number.isInteger(value) ? 'INTEGER' : 'DOUBLE') :
+           typeof value === 'boolean' ? 'BOOLEAN' :
+           typeof value === 'string' ? 'VARCHAR' :
+           value === null ? 'NULL' : 'UNKNOWN'
+  }));
+  
+  conn.close();
+  console.log(`✅ Schema detected: ${schema.length} columns`);
+  resolve(schema);
 }
 
 /**
@@ -129,38 +176,132 @@ async function getSampleData(filePath, limit = 100) {
       const ext = path.extname(filePath).toLowerCase();
       const conn = getConnection().connect();
       
+      // Convert Windows backslashes to forward slashes for SQL
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      
       let readQuery = '';
       if (ext === '.csv') {
-        readQuery = `SELECT * FROM read_csv_auto('${filePath.replace(/\\/g, '\\\\')}') LIMIT ${limit}`;
+        // Use same encoding-tolerant options for sample data
+        readQuery = `SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=false) LIMIT ${limit}`;
       } else if (['.parquet', '.pq'].includes(ext)) {
-        readQuery = `SELECT * FROM read_parquet('${filePath.replace(/\\/g, '\\\\')}') LIMIT ${limit}`;
+        readQuery = `SELECT * FROM read_parquet('${normalizedPath}') LIMIT ${limit}`;
       } else if (ext === '.json') {
-        readQuery = `SELECT * FROM read_json_auto('${filePath.replace(/\\/g, '\\\\')}') LIMIT ${limit}`;
+        readQuery = `SELECT * FROM read_json_auto('${normalizedPath}') LIMIT ${limit}`;
       } else {
         conn.close();
         return reject(new Error(`Unsupported file format: ${ext}`));
       }
       
       conn.all(readQuery, (err, result) => {
-        conn.close();
         if (err) {
-          console.error('❌ Sample data fetch error:', err);
-          return reject(new Error(`Failed to fetch sample data: ${err.message}`));
+          conn.close();
+          console.error('❌ Sample data fetch error (attempt 1):', err.message.split('\n')[0]);
+          
+          // If first attempt fails and it's a CSV, try fallback
+          if (ext === '.csv' && err.message.includes('unicode')) {
+            console.log('🔄 Retrying sample data with fallback settings...');
+            const fallbackQuery = `SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=true) LIMIT ${limit}`;
+            
+            conn.all(fallbackQuery, (retryErr, retryResult) => {
+              if (retryErr) {
+                conn.close();
+                console.error('❌ Sample data fetch error (fallback):', retryErr.message.split('\n')[0]);
+                return reject(new Error(`Failed to fetch sample data: ${retryErr.message.split('\n')[0]}`));
+              }
+              
+              processSampleDataResult(retryResult, conn, resolve);
+            });
+            return;
+          }
+          
+          return reject(new Error(`Failed to fetch sample data: ${err.message.split('\n')[0]}`));
         }
         
-        const columns = result.length > 0 ? Object.keys(result[0]) : [];
-        const rows = result.map(row => Object.values(row));
-        
-        resolve({
-          columns,
-          rows,
-          totalRows: rows.length
-        });
+        processSampleDataResult(result, conn, resolve);
       });
     } catch (error) {
       console.error('❌ Sample data fetch error:', error);
       reject(new Error(`Failed to fetch sample data: ${error.message}`));
     }
+  });
+}
+
+/**
+ * Get all (or up to maxRows) data rows from file for full chart processing
+ * WARNING: For very large files this can be expensive; a future improvement
+ * would push aggregation into SQL directly. For now we cap rows.
+ * @param {string} filePath
+ * @param {number} maxRows - safety cap to avoid loading extremely large files
+ * @returns {Promise<Object>} - {columns, rows, totalRows}
+ */
+async function getAllData(filePath, maxRows = 100000) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return reject(new Error(`File not found: ${filePath}`));
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const conn = getConnection().connect();
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      let readQuery = '';
+      if (ext === '.csv') {
+        readQuery = `SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=false)`;
+      } else if (['.parquet', '.pq'].includes(ext)) {
+        readQuery = `SELECT * FROM read_parquet('${normalizedPath}')`;
+      } else if (ext === '.json') {
+        readQuery = `SELECT * FROM read_json_auto('${normalizedPath}')`;
+      } else {
+        conn.close();
+        return reject(new Error(`Unsupported file format: ${ext}`));
+      }
+      // Apply safety cap
+      readQuery += ` LIMIT ${maxRows}`;
+      conn.all(readQuery, (err, result) => {
+        if (err) {
+          conn.close();
+          console.error('❌ Full data fetch error (attempt 1):', err.message.split('\n')[0]);
+          if (ext === '.csv' && err.message.includes('unicode')) {
+            console.log('🔄 Retrying full data with fallback settings...');
+            const fallbackQuery = `SELECT * FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=true) LIMIT ${maxRows}`;
+            conn.all(fallbackQuery, (retryErr, retryResult) => {
+              if (retryErr) {
+                conn.close();
+                console.error('❌ Full data fetch error (fallback):', retryErr.message.split('\n')[0]);
+                return reject(new Error(`Failed to fetch full data: ${retryErr.message.split('\n')[0]}`));
+              }
+              const columns = retryResult.length > 0 ? Object.keys(retryResult[0]) : [];
+              const rows = retryResult.map(r => Object.values(r));
+              conn.close();
+              return resolve({ columns, rows, totalRows: rows.length });
+            });
+            return;
+          }
+          return reject(new Error(`Failed to fetch full data: ${err.message.split('\n')[0]}`));
+        }
+        const columns = result.length > 0 ? Object.keys(result[0]) : [];
+        const rows = result.map(r => Object.values(r));
+        conn.close();
+        resolve({ columns, rows, totalRows: rows.length });
+      });
+    } catch (error) {
+      console.error('❌ Full data fetch error:', error);
+      reject(new Error(`Failed to fetch full data: ${error.message}`));
+    }
+  });
+}
+
+/**
+ * Helper function to process sample data results
+ */
+function processSampleDataResult(result, conn, resolve) {
+  const columns = result.length > 0 ? Object.keys(result[0]) : [];
+  const rows = result.map(row => Object.values(row));
+  
+  conn.close();
+  resolve({
+    columns,
+    rows,
+    totalRows: rows.length
   });
 }
 
@@ -215,6 +356,7 @@ module.exports = {
   executeQuery,
   detectSchema,
   getSampleData,
+  getAllData,
   executeChartQuery,
   closeConnection
 };

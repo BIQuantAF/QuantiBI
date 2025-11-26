@@ -228,13 +228,23 @@ class ApiService {
     return response.data;
   }
 
-  async createReport(workspaceId: string, reportData: { title: string; description?: string; chartIds: string[] }): Promise<any> {
+  async getPublicReport(shareToken: string): Promise<any> {
+    const response = await this.api.get(`/reports/public/${shareToken}`);
+    return response.data;
+  }
+
+  async createReport(workspaceId: string, reportData: { title: string; description?: string; datasetId: string }): Promise<any> {
     const response = await this.api.post(`/workspaces/${workspaceId}/reports`, reportData);
     return response.data;
   }
 
   async deleteReport(workspaceId: string, reportId: string): Promise<void> {
     await this.api.delete(`/workspaces/${workspaceId}/reports/${reportId}`);
+  }
+
+  async shareReport(workspaceId: string, reportId: string): Promise<{ shareUrl: string; shareToken: string }> {
+    const response = await this.api.post(`/workspaces/${workspaceId}/reports/${reportId}/share`, {});
+    return response.data;
   }
 
   // File Upload

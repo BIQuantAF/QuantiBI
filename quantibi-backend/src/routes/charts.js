@@ -16,6 +16,34 @@ const s3Service = require('../services/s3');
 const duckdbService = require('../services/duckdb');
 
 /**
+ * Helper function to convert BigInt values to regular numbers for JSON serialization
+ * Also handles Date objects and other special types
+ * @param {*} obj - Object to convert
+ * @returns {*} - Object with BigInt values converted to numbers and Dates converted to ISO strings
+ */
+function convertBigIntToNumber(obj) {
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  // Handle Date objects by converting to ISO string
+  if (obj instanceof Date) {
+    return obj.toISOString();
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToNumber);
+  }
+  // Handle plain objects (but not special types like Date)
+  if (obj !== null && typeof obj === 'object' && obj.constructor === Object) {
+    const converted = {};
+    for (const key in obj) {
+      converted[key] = convertBigIntToNumber(obj[key]);
+    }
+    return converted;
+  }
+  return obj;
+}
+
+/**
  * @route   GET /api/workspaces/:workspaceId/charts/:chartId
  * @desc    Get a single chart by ID for a workspace
  * @access  Private
@@ -378,7 +406,8 @@ router.post('/:workspaceId/charts/ai/generate', authenticateUser, async (req, re
           ...datasetDetails[0].database,
           columns: columns,
           sampleData: sampleData,
-          totalRows: sampleResult.totalRows || 0
+          totalRows: sampleResult.totalRows || 0,
+          localFilePath: filePath  // Store the file path for later use in aggregation
         };
         
         console.log('File data loaded via DuckDB:', {
@@ -405,11 +434,14 @@ router.post('/:workspaceId/charts/ai/generate', authenticateUser, async (req, re
     }
 
     console.log('Dataset details loaded');
-    console.log('Dataset details structure:', JSON.stringify(datasetDetails, null, 2));
+    
+    // Convert BigInt values before stringifying
+    const cleanedDatasetDetails = convertBigIntToNumber(datasetDetails);
+    console.log('Dataset details structure:', JSON.stringify(cleanedDatasetDetails, null, 2));
 
     // Create prompt for OpenAI with detailed data information
     const prompt = `Given the following dataset and its contents:
-${JSON.stringify(datasetDetails, null, 2)}
+${JSON.stringify(cleanedDatasetDetails, null, 2)}
 
 User question: ${query}
 
@@ -923,6 +955,116 @@ For "orders in Kentucky in November 2016":
           console.error('Error processing Excel file:', error);
           throw new Error(`Error processing Excel file: ${error.message}`);
         }
+      } else if (dataset.database.type === 'CSV') {
+        // CSV aggregation via DuckDB SQL (push-down filters & grouping)
+        console.log('Aggregating CSV via DuckDB');
+        try {
+          const filePath = dataset.database.localFilePath || dataset.database.filePath;
+          if (!filePath) throw new Error('File path missing for CSV dataset');
+          const normalizedPath = filePath.replace(/\\/g, '/');
+
+          const dim = aiResponse.dataQuery.dimension;
+          const seriesDim = aiResponse.dataQuery.seriesDimension;
+          const measure = aiResponse.dataQuery.measure;
+          const isDateDim = dim && dim.toLowerCase().includes('date');
+          const quote = c => `"${c.replace(/"/g, '')}"`;
+          const groupExpr = dim ? (isDateDim ? `strftime(${quote(dim)}, '%Y-%m')` : quote(dim)) : null;
+          const seriesExpr = (aiResponse.dataQuery.multiSeries && seriesDim) ? quote(seriesDim) : null;
+
+          let aggExpr;
+          switch (aiResponse.dataQuery.type) {
+            case 'count': aggExpr = 'COUNT(*) AS value'; break;
+            case 'sum': aggExpr = `SUM(${quote(measure)}) AS value`; break;
+            case 'average': aggExpr = `AVG(${quote(measure)}) AS value`; break;
+            default: aggExpr = 'COUNT(*) AS value';
+          }
+
+          const selectParts = [];
+          if (groupExpr) selectParts.push(`${groupExpr} AS group_key`);
+          if (seriesExpr) selectParts.push(`${seriesExpr} AS series_key`);
+          selectParts.push(aggExpr);
+          let sql = `SELECT ${selectParts.join(', ')} FROM read_csv_auto('${normalizedPath}', ignore_errors=true, all_varchar=false)`;
+
+          const whereClauses = [];
+          (aiResponse.dataQuery.filters || []).forEach(f => {
+            if (!f.column || f.value === undefined) return;
+            const col = quote(f.column);
+            if (f.operator === 'IN' && Array.isArray(f.value)) {
+              const vals = f.value.map(v => `'${String(v).replace(/'/g, "''")}'`).join(',');
+              whereClauses.push(`${col} IN (${vals})`);
+            } else if (f.operator === 'LIKE') {
+              whereClauses.push(`${col} LIKE '%${String(f.value).replace(/'/g, "''")}%'`);
+            } else {
+              whereClauses.push(`${col} ${f.operator} '${String(f.value).replace(/'/g, "''")}'`);
+            }
+          });
+          if (whereClauses.length) sql += ` WHERE ${whereClauses.join(' AND ')}`;
+          if (groupExpr || seriesExpr) {
+            const grpCols = [];
+            if (groupExpr) grpCols.push('group_key');
+            if (seriesExpr) grpCols.push('series_key');
+            sql += ' GROUP BY ' + grpCols.join(', ');
+            if (groupExpr) sql += ' ORDER BY group_key';
+          }
+
+          console.log('=== CSV AGGREGATION DEBUG ===');
+          console.log('AI Response:', JSON.stringify(aiResponse.dataQuery, null, 2));
+          console.log('Dimension:', dim);
+          console.log('Is Date Dimension:', isDateDim);
+          console.log('Measure:', measure);
+          console.log('Filters:', aiResponse.dataQuery.filters);
+          console.log('Executing CSV aggregation SQL:', sql);
+          const rows = await duckdbService.executeQuery(filePath, sql);
+          console.log('CSV aggregation returned', rows.length, 'rows');
+          if (rows.length > 0) {
+            console.log('First few rows:', rows.slice(0, 3));
+          }
+
+          let result;
+          const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+          if (rows.length === 0) {
+            result = { labels: [], datasets: [{ label: 'Empty', data: [] }] };
+          } else if (seriesExpr) {
+            const labelsSet = new Set();
+            const seriesMap = {};
+            rows.forEach(r => {
+              labelsSet.add(r.group_key);
+              const sk = r.series_key;
+              if (!seriesMap[sk]) seriesMap[sk] = {};
+              seriesMap[sk][r.group_key] = Number(r.value) || 0;
+            });
+            const sortedKeys = Array.from(labelsSet).sort();
+            let labels = sortedKeys;
+            if (isDateDim) {
+              labels = sortedKeys.map(k => {
+                const [y,m] = k.split('-');
+                return `${monthNames[parseInt(m)-1]} ${y}`;
+              });
+            }
+            const datasets = Object.keys(seriesMap).map(sk => ({
+              label: sk + (measure ? ` - ${measure}` : ''),
+              data: sortedKeys.map(l => seriesMap[sk][l] || 0)
+            }));
+            result = { labels, datasets };
+          } else if (groupExpr) {
+            const keys = rows.map(r => r.group_key);
+            let labels = keys;
+            if (isDateDim) {
+              labels = keys.map(k => { const [y,m]=k.split('-'); return `${monthNames[parseInt(m)-1]} ${y}`; });
+            }
+            result = { labels, datasets: [{ label: `${aiResponse.dataQuery.type} ${measure || ''}`.trim(), data: rows.map(r => Number(r.value) || 0) }] };
+          } else {
+            result = { labels: ['Total'], datasets: [{ label: `${aiResponse.dataQuery.type} ${measure || ''}`.trim(), data: [Number(rows[0].value) || 0] }] };
+          }
+
+          chartData = result;
+          break;
+        } catch (err) {
+          console.error('CSV aggregation failed:', err.message);
+          const sample = dataset.database.sampleData || [];
+          chartData = { labels: ['Sample Count'], datasets: [{ label: 'Count', data: [sample.length] }] };
+          break;
+        }
       } else if (dataset.database.type === 'Google BigQuery') {
         // Handle BigQuery data processing
         console.log('Processing BigQuery data for chart generation');
@@ -1154,15 +1296,25 @@ For "orders in Kentucky in November 2016":
               console.log('All labels:', Array.from(allLabels));
               
               // Sort labels if they're dates
-              const labels = Array.from(allLabels);
+              let labels = Array.from(allLabels);
               if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
                 labels.sort();
+                // Convert YYYY-MM to friendly month names
+                const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                labels = labels.map(k => {
+                  if (k && k.includes('-')) {
+                    const [y,m] = k.split('-');
+                    return `${monthNames[parseInt(m)-1]} ${y}`;
+                  }
+                  return k;
+                });
               }
               
-              // Create datasets for each series
+              // Create datasets for each series (use original sorted keys for data lookup)
+              const originalKeys = Array.from(allLabels).sort();
               const datasets = Object.keys(seriesData).map(seriesKey => ({
                 label: `${seriesKey} - ${aiResponse.dataQuery.measure || 'Count'}`,
-                data: labels.map(label => seriesData[seriesKey][label] || 0)
+                data: originalKeys.map(label => seriesData[seriesKey][label] || 0)
               }));
               
               console.log('Final BigQuery datasets:', datasets);
@@ -1173,15 +1325,27 @@ For "orders in Kentucky in November 2016":
               };
             } else {
               // Single-series processing (original logic)
-              const labels = queryResults.map(row => {
+              let labels = queryResults.map(row => {
                 // For date dimensions, use month_year field; otherwise use the original dimension
                 const value = aiResponse.dataQuery.dimension.toLowerCase().includes('date') 
                   ? extractValue(row.month_year) 
                   : extractValue(row[aiResponse.dataQuery.dimension]);
                 
-                // No need for additional formatting since we're using FORMAT_DATE in SQL for dates
                 return String(value || '');
               });
+              
+              // Convert YYYY-MM to friendly month names for date dimensions
+              if (aiResponse.dataQuery.dimension.toLowerCase().includes('date')) {
+                const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                labels = labels.map(k => {
+                  if (k && k.includes('-')) {
+                    const [y,m] = k.split('-');
+                    return `${monthNames[parseInt(m)-1]} ${y}`;
+                  }
+                  return k;
+                });
+              }
+              
               let dataValues = [];
               let label = '';
               

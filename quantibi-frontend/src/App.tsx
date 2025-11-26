@@ -11,6 +11,8 @@ import CreateChart from './components/charts/CreateChart';
 import Dashboards from './components/dashboards/Dashboards';
 import DashboardView from './components/dashboards/DashboardView';
 import Reports from './components/reports/Reports';
+import ReportPage from './components/reports/ReportPage';
+import PublicReportPage from './components/reports/PublicReportPage';
 import WorkspaceSettings from './components/workspace/WorkspaceSettings';
 import Navigation from './components/common/Navigation';
 import EditChart from './components/charts/EditChart';
@@ -110,6 +112,17 @@ const App: React.FC = () => {
                     <Reports />
                   </div>
                 </ProtectedRoute>
+              } />
+              <Route path="/workspaces/:workspaceId/reports/:reportId" element={
+                <ProtectedRoute>
+                  <div>
+                    <Navigation />
+                    <ReportPage />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/report/:shareToken" element={
+                <PublicReportPage />
               } />
               <Route path="/workspace/:workspaceId/settings" element={
                 <ProtectedRoute>

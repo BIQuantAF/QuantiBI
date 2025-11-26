@@ -19,11 +19,34 @@ const reportSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  // Chart IDs included in this report
+  // Dataset ID that the report is based on
+  datasetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Dataset',
+    required: true,
+  },
+  // Chart IDs included in this report (auto-generated or user-added)
   chartIds: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Chart',
+    },
+  ],
+  // Report content sections
+  sections: [
+    {
+      type: {
+        type: String,
+        enum: ['title', 'summary', 'metric', 'insight', 'chart', 'conclusion'],
+      },
+      title: String,
+      content: String,
+      chartId: mongoose.Schema.Types.ObjectId,
+      metrics: {
+        label: String,
+        value: String,
+        format: String,
+      },
     },
   ],
   // AI-generated summary and insights
@@ -47,6 +70,16 @@ const reportSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  // Public sharing link
+  shareToken: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  isPublic: {
+    type: Boolean,
+    default: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -64,6 +97,8 @@ reportSchema.pre('save', function (next) {
 
 reportSchema.index({ workspace: 1 });
 reportSchema.index({ createdBy: 1 });
+reportSchema.index({ datasetId: 1 });
+reportSchema.index({ shareToken: 1 });
 
 const Report = mongoose.model('Report', reportSchema);
 

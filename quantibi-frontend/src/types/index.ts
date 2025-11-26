@@ -7,6 +7,46 @@ export interface DatasetCreate {
   table: string;
   owners?: string[];
 }
+
+// Report section types
+export interface ReportSection {
+  type: 'title' | 'summary' | 'metric' | 'insight' | 'chart' | 'conclusion';
+  title?: string;
+  content?: string;
+  chartId?: string;
+  metrics?: {
+    label: string;
+    value: string;
+    format: string;
+  };
+}
+
+// Report types
+export interface Report {
+  _id: string;
+  workspace: string;
+  createdBy: string;
+  title: string;
+  description?: string;
+  datasetId: string;
+  chartIds: string[];
+  sections?: ReportSection[];
+  summary?: string;
+  insights?: string[];
+  status: 'draft' | 'completed' | 'failed';
+  error?: string;
+  shareToken?: string;
+  isPublic?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportCreate {
+  title: string;
+  description?: string;
+  datasetId: string;
+}
+
 // User types
 export interface User {
   uid: string;
@@ -59,6 +99,10 @@ export interface Database {
   sheetName?: string;
   filePath?: string;
   fileType?: string;
+  s3Key?: string;
+  s3Bucket?: string;
+  s3Url?: string;
+  fileSize?: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,25 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
-
-interface Report {
-  _id: string;
-  title: string;
-  description?: string;
-  status: 'draft' | 'completed' | 'failed';
-  summary?: string;
-  insights?: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+import { Report, Dataset } from '../../types/index';
 
 const Reports: React.FC = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -50,6 +40,10 @@ const Reports: React.FC = () => {
       console.error('Error deleting report:', err);
       setError(err?.response?.data?.message || 'Failed to delete report');
     }
+  };
+
+  const handleViewReport = (reportId: string) => {
+    navigate(`/workspaces/${workspaceId}/reports/${reportId}`);
   };
 
   const getStatusColor = (status: string) => {
@@ -94,8 +88,8 @@ const Reports: React.FC = () => {
           {reports.map(report => (
             <div
               key={report._id}
-              onClick={() => setSelectedReportId(report._id)}
-              className="p-4 border border-gray-200 rounded-lg hover:shadow-md cursor-pointer transition"
+              onClick={() => handleViewReport(report._id)}
+              className="p-4 border border-gray-200 rounded-lg hover:shadow-md cursor-pointer transition bg-white"
             >
               <div className="flex justify-between items-start mb-2">
                 <h3 className="text-lg font-semibold text-gray-900">{report.title}</h3>
@@ -138,14 +132,6 @@ const Reports: React.FC = () => {
           }}
         />
       )}
-
-      {selectedReportId && (
-        <ReportDetailModal
-          workspaceId={workspaceId!}
-          reportId={selectedReportId}
-          onClose={() => setSelectedReportId(null)}
-        />
-      )}
     </div>
   );
 };
@@ -159,23 +145,23 @@ interface CreateReportModalProps {
 const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onClose, onReportCreated }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [charts, setCharts] = useState<any[]>([]);
-  const [selectedCharts, setSelectedCharts] = useState<string[]>([]);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchCharts();
+    fetchDatasets();
   }, [workspaceId]);
 
-  const fetchCharts = async () => {
+  const fetchDatasets = async () => {
     try {
-      const data = await apiService.getCharts(workspaceId);
-      setCharts(data);
+      const data = await apiService.getDatasets(workspaceId);
+      setDatasets(data);
     } catch (err: any) {
-      console.error('Error fetching charts:', err);
-      setError(err?.response?.data?.message || 'Failed to load charts');
+      console.error('Error fetching datasets:', err);
+      setError(err?.response?.data?.message || 'Failed to load datasets');
     } finally {
       setLoading(false);
     }
@@ -186,8 +172,8 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
       setError('Report title is required');
       return;
     }
-    if (selectedCharts.length === 0) {
-      setError('Select at least one chart');
+    if (!selectedDataset) {
+      setError('Select a dataset');
       return;
     }
 
@@ -196,7 +182,7 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
       await apiService.createReport(workspaceId, {
         title,
         description,
-        chartIds: selectedCharts,
+        datasetId: selectedDataset,
       });
       onReportCreated();
     } catch (err: any) {
@@ -210,7 +196,7 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-96 overflow-y-auto">
-        <h3 className="text-lg font-semibold mb-4">Generate Report</h3>
+        <h3 className="text-lg font-semibold mb-4">Generate Report from Dataset</h3>
 
         {error && (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded text-sm">
@@ -247,32 +233,25 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Charts *
+              Select Dataset *
             </label>
             {loading ? (
-              <p className="text-sm text-gray-500">Loading charts...</p>
-            ) : charts.length === 0 ? (
-              <p className="text-sm text-gray-500">No charts available</p>
+              <p className="text-sm text-gray-500">Loading datasets...</p>
+            ) : datasets.length === 0 ? (
+              <p className="text-sm text-gray-500">No datasets available. Create a dataset first.</p>
             ) : (
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {charts.map(chart => (
-                  <label key={chart._id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedCharts.includes(chart._id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCharts([...selectedCharts, chart._id]);
-                        } else {
-                          setSelectedCharts(selectedCharts.filter(id => id !== chart._id));
-                        }
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">{chart.title}</span>
-                  </label>
+              <select
+                value={selectedDataset}
+                onChange={(e) => setSelectedDataset(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">-- Select a dataset --</option>
+                {datasets.map(dataset => (
+                  <option key={dataset._id} value={dataset._id}>
+                    {dataset.name}
+                  </option>
                 ))}
-              </div>
+              </select>
             )}
           </div>
         </div>
@@ -289,120 +268,12 @@ const CreateReportModal: React.FC<CreateReportModalProps> = ({ workspaceId, onCl
             disabled={creating}
             className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
           >
-            {creating ? 'Creating...' : 'Generate'}
+            {creating ? 'Generating...' : 'Generate'}
           </button>
         </div>
       </div>
     </div>
   );
-};
-
-interface ReportDetailModalProps {
-  workspaceId: string;
-  reportId: string;
-  onClose: () => void;
-}
-
-const ReportDetailModal: React.FC<ReportDetailModalProps> = ({ workspaceId, reportId, onClose }) => {
-  const [report, setReport] = useState<Report | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchReport();
-    const interval = setInterval(fetchReport, 3000); // Poll for updates every 3s
-    return () => clearInterval(interval);
-  }, [reportId]);
-
-  const fetchReport = async () => {
-    try {
-      const data = await apiService.getReport(workspaceId, reportId);
-      setReport(data);
-    } catch (err) {
-      console.error('Error fetching report:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div className="bg-white rounded-lg p-6 max-w-2xl w-full">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!report) {
-    return null;
-  }
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">{report.title}</h3>
-            {report.description && (
-              <p className="text-gray-600 text-sm mt-1">{report.description}</p>
-            )}
-          </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(report.status)}`}>
-            {report.status}
-          </span>
-        </div>
-
-        {report.status === 'completed' ? (
-          <div>
-            {report.summary && (
-              <div className="mb-6">
-                <h4 className="font-semibold text-gray-900 mb-2">Summary</h4>
-                <p className="text-gray-700 text-sm">{report.summary}</p>
-              </div>
-            )}
-            {report.insights && report.insights.length > 0 && (
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Key Insights</h4>
-                <ul className="space-y-2">
-                  {report.insights.map((insight, idx) => (
-                    <li key={idx} className="text-sm text-gray-700 flex gap-2">
-                      <span className="text-indigo-600">•</span>
-                      {insight}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : report.status === 'failed' ? (
-          <div className="p-4 bg-red-100 text-red-700 rounded text-sm">
-            Failed to generate report: {report.error || 'Unknown error'}
-          </div>
-        ) : (
-          <div className="p-4 bg-yellow-100 text-yellow-700 rounded text-sm">
-            Report is being generated. This may take a moment...
-          </div>
-        )}
-
-        <button
-          onClick={onClose}
-          className="mt-6 w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'completed':
-      return 'bg-green-100 text-green-800';
-    case 'failed':
-      return 'bg-red-100 text-red-800';
-    default:
-      return 'bg-yellow-100 text-yellow-800';
-  }
 };
 
 export default Reports;
