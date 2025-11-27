@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
-import { useNavigate } from 'react-router-dom';
 
 interface UserUsage {
   uploads: number;
@@ -25,8 +24,7 @@ interface UserData {
 }
 
 const AccountSettings: React.FC = () => {
-  const { currentUser, logout } = useAuth();
-  const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
