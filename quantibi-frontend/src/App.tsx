@@ -14,6 +14,7 @@ import Reports from './components/reports/Reports';
 import ReportPage from './components/reports/ReportPage';
 import PublicReportPage from './components/reports/PublicReportPage';
 import WorkspaceSettings from './components/workspace/WorkspaceSettings';
+import AccountSettings from './components/account/AccountSettings';
 import Navigation from './components/common/Navigation';
 import EditChart from './components/charts/EditChart';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -22,12 +23,7 @@ import { WorkspaceProvider } from './contexts/WorkspaceContext';
 import './App.css';
 import UpgradeModal from './components/common/UpgradeModal';
 
-console.log('🚀 App.tsx: This file is being executed!');
-console.log('🚀 App.tsx: React version:', React.version);
-
 const App: React.FC = () => {
-  console.log('🚀 App: Component is rendering!');
-
   return (
     <AuthProvider>
       <WorkspaceProvider>
@@ -129,6 +125,14 @@ const App: React.FC = () => {
                   <div>
                     <Navigation />
                     <WorkspaceSettings />
+                  </div>
+                </ProtectedRoute>
+              } />
+              <Route path="/account" element={
+                <ProtectedRoute>
+                  <div>
+                    <Navigation />
+                    <AccountSettings />
                   </div>
                 </ProtectedRoute>
               } />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -9,31 +9,19 @@ const PasswordReset: React.FC = () => {
   const [message, setMessage] = useState('');
   const { resetPassword } = useAuth();
 
-  // Test if component is loading
-  useEffect(() => {
-    console.log('🚀 PasswordReset component loaded');
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
     setMessage('');
 
-    console.log('🔍 Password reset attempt for:', email);
-
     try {
-      console.log('🔍 Calling resetPassword function...');
       await resetPassword(email);
-      console.log('✅ Password reset email sent successfully');
       setMessage('Check your email for a link to reset your password.');
     } catch (err) {
-      console.error('❌ Password reset error:', err);
       if (err instanceof Error) {
-        console.log('❌ Error message:', err.message);
         setError(err.message);
       } else {
-        console.log('❌ Unknown error type:', typeof err);
         setError('Failed to send password reset email. Please try again.');
       }
     } finally {

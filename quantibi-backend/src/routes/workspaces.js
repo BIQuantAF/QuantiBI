@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
+const { validate, validateWorkspace, validateInvite, validateObjectId } = require('../middleware/validation');
 const Workspace = require('../models/Workspace');
 const crypto = require('crypto');
 
@@ -31,7 +32,7 @@ router.get('/', authenticateUser, async (req, res) => {
  * @desc    Create a new workspace
  * @access  Private
  */
-router.post('/', authenticateUser, async (req, res) => {
+router.post('/', authenticateUser, validateWorkspace, validate, async (req, res) => {
   try {
     const { name, description } = req.body;
 
@@ -105,7 +106,7 @@ router.get('/:id', authenticateUser, async (req, res) => {
  * @desc    Update a workspace
  * @access  Private
  */
-router.put('/:id', authenticateUser, async (req, res) => {
+router.put('/:id', authenticateUser, validateObjectId('id'), validateWorkspace, validate, async (req, res) => {
   try {
     const { name, description } = req.body;
     const workspace = await Workspace.findById(req.params.id);
@@ -139,7 +140,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
  * @desc    Invite a user to a workspace
  * @access  Private
  */
-router.post('/:id/invite', authenticateUser, async (req, res) => {
+router.post('/:id/invite', authenticateUser, validateObjectId('id'), validateInvite, validate, async (req, res) => {
   try {
     const { email, role } = req.body;
     const workspace = await Workspace.findById(req.params.id);
@@ -200,14 +201,11 @@ router.post('/:id/invite', authenticateUser, async (req, res) => {
  * @desc    Delete a workspace
  * @access  Private
  */
-router.delete('/:id', authenticateUser, async (req, res) => {
+router.delete('/:id', authenticateUser, validateObjectId('id'), validate, async (req, res) => {
   try {
-    console.log('Deleting workspace:', req.params.id);
-
     const workspace = await Workspace.findById(req.params.id);
     
     if (!workspace) {
-      console.log('Workspace not found:', req.params.id);
       return res.status(404).json({ message: 'Workspace not found' });
     }
 
@@ -220,11 +218,9 @@ router.delete('/:id', authenticateUser, async (req, res) => {
     const result = await Workspace.deleteOne({ _id: req.params.id });
     
     if (result.deletedCount === 0) {
-      console.log('No workspace was deleted');
       return res.status(404).json({ message: 'Workspace not found' });
     }
 
-    console.log('Workspace deleted successfully');
     res.json({ message: 'Workspace deleted successfully' });
   } catch (error) {
     console.error('Error deleting workspace:', error);
@@ -241,7 +237,7 @@ router.delete('/:id', authenticateUser, async (req, res) => {
  * @desc    Remove a member from a workspace
  * @access  Private
  */
-router.delete('/:id/members/:memberId', authenticateUser, async (req, res) => {
+router.delete('/:id/members/:memberId', authenticateUser, validateObjectId('id'), validate, async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.id);
     

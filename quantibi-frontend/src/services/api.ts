@@ -265,6 +265,18 @@ class ApiService {
     return response.data;
   }
 
+  // Get user usage and limits
+  async getUserUsage(): Promise<any> {
+    const response = await this.api.get('/users/me');
+    return response.data;
+  }
+
+  // Cancel user subscription
+  async cancelSubscription(): Promise<{ message: string; cancelAt?: number; currentPeriodEnd?: number }> {
+    const response = await this.api.post('/payments/cancel-subscription');
+    return response.data;
+  }
+
   // Execute custom SQL query
   async executeSQL(params: { sql: string; dataset: string; workspace: string }): Promise<any> {
     const response = await this.api.post(`/workspaces/${params.workspace}/charts/execute-sql`, {

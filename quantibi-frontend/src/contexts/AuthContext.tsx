@@ -40,22 +40,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('🔍 AuthProvider: Setting up auth state listener');
-    console.log('🔍 Firebase auth object:', auth);
-    
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      console.log('🔍 Auth state changed:', firebaseUser ? `User: ${firebaseUser.email}` : 'No user');
-      
       if (firebaseUser) {
         const user: User = {
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
           emailVerified: firebaseUser.emailVerified,
         };
-        console.log('✅ Setting current user:', user);
         setCurrentUser(user);
       } else {
-        console.log('❌ Clearing current user');
         setCurrentUser(null);
       }
       setLoading(false);
@@ -65,55 +58,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
-    console.log('🔍 AuthContext.login called with:', { email, password: password ? '***' : 'empty' });
-    
-    try {
-      console.log('🔍 Calling Firebase signInWithEmailAndPassword...');
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      console.log('✅ Firebase login successful:', result.user.email);
-    } catch (error) {
-      console.error('❌ Firebase login error:', error);
-      throw error;
-    }
+    await signInWithEmailAndPassword(auth, email, password);
   };
 
   const signup = async (email: string, password: string): Promise<void> => {
-    console.log('🔍 AuthContext.signup called with:', { email, password: password ? '***' : 'empty' });
-    
-    try {
-      console.log('🔍 Calling Firebase createUserWithEmailAndPassword...');
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      console.log('✅ Firebase signup successful:', result.user.email);
-    } catch (error) {
-      console.error('❌ Firebase signup error:', error);
-      throw error;
-    }
+    await createUserWithEmailAndPassword(auth, email, password);
   };
 
   const loginWithGoogle = async (): Promise<void> => {
-    console.log('🔍 AuthContext.loginWithGoogle called');
-    
-    try {
-      console.log('🔍 Calling Firebase signInWithPopup with Google...');
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log('✅ Google login successful:', result.user.email);
-    } catch (error) {
-      console.error('❌ Google login error:', error);
-      throw error;
-    }
+    await signInWithPopup(auth, googleProvider);
   };
 
   const logout = async (): Promise<void> => {
-    console.log('🔍 AuthContext.logout called');
-
-    try {
-      console.log('🔍 Calling Firebase signOut...');
-      await signOut(auth);
-      console.log('✅ Firebase logout successful');
-    } catch (error) {
-      console.error('❌ Firebase logout error:', error);
-      throw error;
-    }
+    await signOut(auth);
   };
 
   const resetPassword = async (email: string): Promise<void> => {

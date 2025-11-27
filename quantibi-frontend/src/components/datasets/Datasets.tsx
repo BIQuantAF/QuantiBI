@@ -88,12 +88,6 @@ const Datasets: React.FC = () => {
     try {
       const allDatasets = await apiService.getDatasets(currentWorkspace!._id);
       
-      // Log each dataset's database ID for debugging
-      allDatasets.forEach((dataset, index) => {
-        const dbId = typeof dataset.database === 'object' ? (dataset.database as any)._id : dataset.database;
-        console.log(`Dataset ${index}: "${dataset.name}" -> database ID: ${dbId}`);
-      });
-      
       // Filter datasets that belong to this database
       const filteredDatasets = allDatasets.filter(dataset => {
         const datasetDbId = typeof dataset.database === 'object' ? (dataset.database as any)._id : dataset.database;
@@ -177,9 +171,7 @@ const Datasets: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      console.log('🔍 Fetching databases for workspace:', currentWorkspace._id);
       const fetchedDatabases = await apiService.getDatabases(currentWorkspace._id);
-      console.log('✅ Fetched databases:', fetchedDatabases);
       
       setDatabases(fetchedDatabases);
     } catch (err) {
@@ -473,11 +465,8 @@ const Datasets: React.FC = () => {
     }
 
     try {
-      console.log('🔍 Creating database connection:', formData);
-      
       // Create the database connection via API
       const newDatabase = await apiService.createDatabase(currentWorkspace._id, formData, selectedFile || undefined);
-      console.log('✅ Database connection created successfully:', newDatabase);
       
       // Add to local state
       setDatabases(prev => [...prev, newDatabase]);
@@ -514,11 +503,8 @@ const Datasets: React.FC = () => {
     setTestResult(null);
 
     try {
-      console.log('🔍 Testing database connection:', formData);
-      
       // Test the connection via API
       const result = await apiService.testDatabaseConnection(currentWorkspace._id, formData);
-      console.log('✅ Connection test result:', result);
       
       setTestResult(result);
     } catch (error) {

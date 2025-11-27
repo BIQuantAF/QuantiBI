@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { LoginForm } from '../../types';
@@ -17,14 +17,6 @@ const Login: React.FC = () => {
 
   const from = location.state?.from?.pathname || '/workspaces';
 
-  // Test if component is loading
-  useEffect(() => {
-    console.log('🚀 Login component loaded');
-    console.log('🚀 Login component: Environment check:', {
-      REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY ? '✅ Set' : '❌ Missing',
-    });
-  }, []);
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -38,25 +30,13 @@ const Login: React.FC = () => {
     setIsLoading(true);
     setError('');
 
-    console.log('🔍 Login attempt with:', { email: formData.email, password: formData.password ? '***' : 'empty' });
-    console.log('🔍 Firebase config check:', {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY ? '✅ Set' : '❌ Missing',
-      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN ? '✅ Set' : '❌ Missing',
-      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID ? '✅ Set' : '❌ Missing',
-    });
-
     try {
-      console.log('🔍 Calling login function...');
       await login(formData.email, formData.password);
-      console.log('✅ Login successful, navigating to:', from);
       navigate(from, { replace: true });
     } catch (err) {
-      console.error('❌ Login error:', err);
       if (err instanceof Error) {
-        console.log('❌ Error message:', err.message);
         setError(err.message);
       } else {
-        console.log('❌ Unknown error type:', typeof err);
         setError('Failed to sign in. Please check your credentials.');
       }
     } finally {
@@ -69,17 +49,12 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      console.log('🔍 Calling Google sign-in function...');
       await loginWithGoogle();
-      console.log('✅ Google sign-in successful, navigating to:', from);
       navigate(from, { replace: true });
     } catch (err) {
-      console.error('❌ Google sign-in error:', err);
       if (err instanceof Error) {
-        console.log('❌ Error message:', err.message);
         setError(err.message);
       } else {
-        console.log('❌ Unknown error type:', typeof err);
         setError('Failed to sign in with Google. Please try again.');
       }
     } finally {

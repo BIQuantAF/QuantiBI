@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
+const { validate, validateDataset, validateObjectId } = require('../middleware/validation');
 const Dataset = require('../models/Dataset');
 const Workspace = require('../models/Workspace');
 const Database = require('../models/Database');
@@ -42,7 +43,12 @@ router.get('/:workspaceId/datasets', authenticateUser, async (req, res) => {
  * @desc    Create a new dataset
  * @access  Private
  */
-router.post('/:workspaceId/datasets', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/datasets', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateDataset, 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -124,16 +130,15 @@ router.post('/:workspaceId/datasets', authenticateUser, async (req, res) => {
  * @desc    Delete a dataset
  * @access  Private
  */
-router.delete('/:workspaceId/datasets/:datasetId', authenticateUser, async (req, res) => {
+router.delete('/:workspaceId/datasets/:datasetId', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('datasetId'), 
+  validate, 
+  async (req, res) => {
   try {
-    console.log('Deleting dataset:', {
-      workspaceId: req.params.workspaceId,
-      datasetId: req.params.datasetId
-    });
-
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
-      console.log('Workspace not found:', req.params.workspaceId);
       return res.status(404).json({ message: 'Workspace not found' });
     }
 
@@ -152,7 +157,6 @@ router.delete('/:workspaceId/datasets/:datasetId', authenticateUser, async (req,
     });
 
     if (!dataset) {
-      console.log('Dataset not found:', req.params.datasetId);
       return res.status(404).json({ message: 'Dataset not found' });
     }
 
@@ -163,11 +167,9 @@ router.delete('/:workspaceId/datasets/:datasetId', authenticateUser, async (req,
     });
     
     if (result.deletedCount === 0) {
-      console.log('No dataset was deleted');
       return res.status(404).json({ message: 'Dataset not found' });
     }
 
-    console.log('Dataset deleted successfully');
     res.json({ message: 'Dataset deleted successfully' });
   } catch (error) {
     console.error('Error deleting dataset:', error);
@@ -327,10 +329,8 @@ router.get('/:workspaceId/databases/:databaseId/schema', authenticateUser, async
     try {
       // Use S3 if available, otherwise fall back to local file path
       if (database.s3Url && database.s3Key) {
-        console.log('Downloading file from S3 for schema detection:', database.s3Url);
         filePath = await s3Service.downloadFileToTemp(database.s3Key, database.s3Bucket);
       } else if (database.filePath) {
-        console.log('Using local file path for schema detection:', database.filePath);
         filePath = database.filePath;
       } else {
         return res.status(400).json({ message: 'No file path or S3 URL found for this database' });
@@ -400,10 +400,8 @@ router.get('/:workspaceId/databases/:databaseId/preview', authenticateUser, asyn
     try {
       // Use S3 if available, otherwise fall back to local file path
       if (database.s3Url && database.s3Key) {
-        console.log('Downloading file from S3 for preview:', database.s3Url);
         filePath = await s3Service.downloadFileToTemp(database.s3Key, database.s3Bucket);
       } else if (database.filePath) {
-        console.log('Using local file path for preview:', database.filePath);
         filePath = database.filePath;
       } else {
         return res.status(400).json({ message: 'No file path or S3 URL found for this database' });

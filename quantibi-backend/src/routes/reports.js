@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
+const { validate, validateReport, validateObjectId } = require('../middleware/validation');
+const { reportGenerationLimiter } = require('../middleware/security');
 const Report = require('../models/Report');
 const Workspace = require('../models/Workspace');
 const Chart = require('../models/Chart');
@@ -45,7 +47,12 @@ router.get('/public/:shareToken', async (req, res) => {
  * @desc    Generate public share link for a report
  * @access  Private
  */
-router.post('/:workspaceId/reports/:reportId/share', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/reports/:reportId/share', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('reportId'), 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -154,7 +161,13 @@ router.get('/:workspaceId/reports/:reportId', authenticateUser, async (req, res)
  * @desc    Create a new report (AI-generated from dataset)
  * @access  Private
  */
-router.post('/:workspaceId/reports', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/reports', 
+  reportGenerationLimiter, 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateReport, 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -230,7 +243,12 @@ router.post('/:workspaceId/reports', authenticateUser, async (req, res) => {
  * @desc    Delete a report
  * @access  Private
  */
-router.delete('/:workspaceId/reports/:reportId', authenticateUser, async (req, res) => {
+router.delete('/:workspaceId/reports/:reportId', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('reportId'), 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {

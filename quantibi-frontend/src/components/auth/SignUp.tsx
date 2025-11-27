@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { SignUpForm } from '../../types';
@@ -17,11 +17,6 @@ const SignUp: React.FC = () => {
   const location = useLocation();
 
   const from = location.state?.from?.pathname || '/workspaces';
-
-  // Test if component is loading
-  useEffect(() => {
-    console.log('🚀 SignUp component loaded');
-  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -48,20 +43,13 @@ const SignUp: React.FC = () => {
       return;
     }
 
-    console.log('🔍 Signup attempt with:', { email: formData.email, password: formData.password ? '***' : 'empty' });
-
     try {
-      console.log('🔍 Calling signup function...');
       await signup(formData.email, formData.password);
-      console.log('✅ Signup successful, navigating to:', from);
       navigate(from, { replace: true });
     } catch (err) {
-      console.error('❌ Signup error:', err);
       if (err instanceof Error) {
-        console.log('❌ Error message:', err.message);
         setError(err.message);
       } else {
-        console.log('❌ Unknown error type:', typeof err);
         setError('Failed to create account. Please try again.');
       }
     } finally {
@@ -74,17 +62,12 @@ const SignUp: React.FC = () => {
     setError('');
 
     try {
-      console.log('🔍 Calling Google sign-in function...');
       await loginWithGoogle();
-      console.log('✅ Google sign-in successful, navigating to:', from);
       navigate(from, { replace: true });
     } catch (err) {
-      console.error('❌ Google sign-in error:', err);
       if (err instanceof Error) {
-        console.log('❌ Error message:', err.message);
         setError(err.message);
       } else {
-        console.log('❌ Unknown error type:', typeof err);
         setError('Failed to sign in with Google. Please try again.');
       }
     } finally {

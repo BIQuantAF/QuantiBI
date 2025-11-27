@@ -42,7 +42,6 @@ const WorkspaceHome: React.FC = () => {
           console.error('Error loading workspace data:', err);
         }
       })();
-      console.log('🔍 Loading workspace:', workspaceId);
     }
   }, [workspaceId, currentUser, selectWorkspace]);
 

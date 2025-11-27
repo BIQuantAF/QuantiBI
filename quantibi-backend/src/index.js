@@ -1,11 +1,21 @@
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
 const dotenv = require('dotenv');
 const createError = require('http-errors');
 const mongoose = require('mongoose');
 
-// Routes (require after dotenv.config below so env vars are available to modules)
+// Load environment variables first
+dotenv.config();
+
+// Security middleware
+const { 
+  requestIdMiddleware, 
+  helmetConfig, 
+  apiLimiter,
+  getCorsOptions 
+} = require('./middleware/security');
+
+// Routes (require after dotenv.config so env vars are available)
 const userRoutes = require('./routes/users');
 const workspaceRoutes = require('./routes/workspaces');
 const databaseRoutes = require('./routes/databases');
@@ -13,9 +23,6 @@ const datasetRoutes = require('./routes/datasets');
 const chartRoutes = require('./routes/charts');
 const dashboardRoutes = require('./routes/dashboards');
 const reportRoutes = require('./routes/reports');
-
-// Load environment variables
-dotenv.config();
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/quantibi', {
@@ -31,37 +38,19 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/quantibi'
 
 const app = express();
 
-// Middleware
-app.use(helmet());
+// Security Middleware (order matters!)
+// 1. Request ID tracking - must be first
+app.use(requestIdMiddleware);
 
-// CORS configuration with flexible origin handling
-const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL || 'http://localhost:3000',
-      // Handle both with and without trailing slash
-      process.env.FRONTEND_URL?.replace(/\/$/, '') || 'http://localhost:3000',
-      process.env.FRONTEND_URL?.endsWith('/') ? process.env.FRONTEND_URL : `${process.env.FRONTEND_URL}/` || 'http://localhost:3000'
-    ].filter(Boolean);
-    
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      console.log('Allowed origins:', allowedOrigins);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 200
-};
+// 2. Helmet security headers
+app.use(helmetConfig);
 
-app.use(cors(corsOptions));
+// 3. CORS configuration
+app.use(cors(getCorsOptions()));
+
+// 4. Rate limiting (global API limiter)
+// Apply to all routes except webhook (webhook has raw body parser)
+app.use('/api', apiLimiter);
 
 // Mount Stripe webhook route BEFORE the JSON body parser so Stripe signature
 // verification can access the raw request body. The handler is exported from
@@ -69,43 +58,21 @@ app.use(cors(corsOptions));
 let paymentRoutes;
 try {
   paymentRoutes = require('./routes/payments');
-  console.log('Payments module loaded:', !!paymentRoutes);
-  console.log('webhookHandler export exists:', !!(paymentRoutes && paymentRoutes.webhookHandler));
   if (paymentRoutes && paymentRoutes.webhookHandler) {
     app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), paymentRoutes.webhookHandler);
-    console.log('✓ Mounted Stripe webhook handler at /api/payments/webhook (raw body)');
-  } else {
-    console.warn('✗ paymentRoutes or webhookHandler not found. paymentRoutes keys:', paymentRoutes ? Object.keys(paymentRoutes) : 'null');
   }
 } catch (err) {
-  console.warn('✗ Failed to mount Stripe webhook handler early:', err && err.message);
+  // Payment routes optional
 }
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
-app.get('/', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({
-    message: 'QuantiBI API is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    firebase: {
-      projectId: process.env.FIREBASE_PROJECT_ID ? 'Set' : 'Missing',
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL ? 'Set' : 'Missing',
-      privateKey: process.env.FIREBASE_PRIVATE_KEY ? 'Set' : 'Missing'
-    }
-  });
-});
-
-// Test endpoint without authentication
-app.get('/api/test', (req, res) => {
-  res.json({
-    message: 'Test endpoint working',
-    timestamp: new Date().toISOString(),
-    headers: {
-      authorization: req.headers.authorization ? 'Present' : 'Missing'
-    }
+    status: 'ok',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -120,9 +87,6 @@ app.use('/api/workspaces', reportRoutes);
 // Payments (not workspace scoped)
 if (paymentRoutes) {
   app.use('/api/payments', paymentRoutes);
-  console.log('Mounted payment routes at /api/payments');
-} else {
-  console.warn('paymentRoutes is undefined; payment routes not mounted');
 }
 
 // Error handling

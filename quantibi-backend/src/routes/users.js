@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const { authenticateUser } = require('../middleware/auth');
+const { validate } = require('../middleware/validation');
 const Workspace = require('../models/Workspace');
 const User = require('../models/User');
 
@@ -16,7 +17,6 @@ router.get('/me', authenticateUser, async (req, res) => {
     // Ensure a User document exists for tracking plan/usage
     let userDoc = await User.findOne({ uid: req.user.uid });
     if (!userDoc) {
-      console.log('Creating user document for', req.user.uid);
       userDoc = new User({ uid: req.user.uid, email: req.user.email || undefined });
       await userDoc.save();
     }
@@ -24,7 +24,6 @@ router.get('/me', authenticateUser, async (req, res) => {
     // Ensure the user has a default workspace. If not, create one.
     let workspace = await Workspace.findOne({ owner: req.user.uid });
     if (!workspace) {
-      console.log('No workspace found for user, creating default workspace for', req.user.uid);
       workspace = new Workspace({
         name: 'My Workspace',
         owner: req.user.uid
@@ -77,7 +76,7 @@ router.get('/me/usage', authenticateUser, async (req, res) => {
  * @desc    Update user profile information
  * @access  Private
  */
-router.put('/me', authenticateUser, async (req, res) => {
+router.put('/me', authenticateUser, validate, async (req, res) => {
   try {
     const { displayName, photoURL } = req.body;
     

@@ -2,6 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
+const { validate, validateChart, validateChartGeneration, validateObjectId } = require('../middleware/validation');
+const { chartGenerationLimiter } = require('../middleware/security');
 const Chart = require('../models/Chart');
 const Workspace = require('../models/Workspace');
 const Dataset = require('../models/Dataset');
@@ -123,7 +125,7 @@ router.get('/:workspaceId/charts', authenticateUser, async (req, res) => {
  * @desc    Create a new chart
  * @access  Private
  */
-router.post('/:workspaceId/charts', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/charts', authenticateUser, validateObjectId('workspaceId'), validateChart, validate, async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -156,7 +158,7 @@ router.post('/:workspaceId/charts', authenticateUser, async (req, res) => {
  * @desc    Update a chart
  * @access  Private
  */
-router.put('/:workspaceId/charts/:chartId', authenticateUser, async (req, res) => {
+router.put('/:workspaceId/charts/:chartId', authenticateUser, validateObjectId('workspaceId'), validateObjectId('chartId'), validateChart, validate, async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -195,7 +197,7 @@ router.put('/:workspaceId/charts/:chartId', authenticateUser, async (req, res) =
  * @desc    Delete a chart
  * @access  Private
  */
-router.delete('/:workspaceId/charts/:chartId', authenticateUser, async (req, res) => {
+router.delete('/:workspaceId/charts/:chartId', authenticateUser, validateObjectId('workspaceId'), validateObjectId('chartId'), validate, async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -231,14 +233,14 @@ router.delete('/:workspaceId/charts/:chartId', authenticateUser, async (req, res
  * @desc    Generate a chart using AI
  * @access  Private
  */
-router.post('/:workspaceId/charts/ai/generate', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/charts/ai/generate', 
+  chartGenerationLimiter, 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateChartGeneration, 
+  validate, 
+  async (req, res) => {
   try {
-    console.log('Received chart generation request:', {
-      workspaceId: req.params.workspaceId,
-      query: req.body.query,
-      dataset: req.body.dataset
-    });
-
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
       return res.status(404).json({ message: 'Workspace not found' });
@@ -1546,7 +1548,12 @@ For "orders in Kentucky in November 2016":
  * @desc    Update a chart using AI
  * @access  Private
  */
-router.post('/:workspaceId/charts/update', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/charts/update', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateChart, 
+  validate, 
+  async (req, res) => {
   try {
     const { message, currentChart } = req.body;
 
@@ -1664,11 +1671,11 @@ Help modify the chart based on the user's request by providing:
 });
 
 /**
- * @route   POST /api/workspaces/:workspaceId/charts/execute-sql
+ * @route   POST /api/charts/execute-sql
  * @desc    Execute a custom SQL query against a dataset
  * @access  Private
  */
-router.post('/execute-sql', async (req, res) => {
+router.post('/execute-sql', authenticateUser, validate, async (req, res) => {
   try {
     const { sql, dataset } = req.body;
     const { workspaceId } = req.params;

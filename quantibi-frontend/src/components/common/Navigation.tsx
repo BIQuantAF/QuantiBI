@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -8,6 +8,19 @@ const Navigation: React.FC = () => {
   const { currentWorkspace, clearWorkspace } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -18,10 +31,16 @@ const Navigation: React.FC = () => {
     }
   };
 
-  const handleSettings = () => {
+  const handleWorkspaceSettings = () => {
     if (currentWorkspace) {
       navigate(`/workspace/${currentWorkspace._id}/settings`);
+      setShowSettingsMenu(false);
     }
+  };
+
+  const handleAccountSettings = () => {
+    navigate('/account');
+    setShowSettingsMenu(false);
   };
 
   const isActive = (path: string) => {
@@ -136,12 +155,38 @@ const Navigation: React.FC = () => {
             )}
             {currentWorkspace && (
               <>
-                <button
-                  onClick={handleSettings}
-                  className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  Settings
-                </button>
+                <div className="relative" ref={settingsMenuRef}>
+                  <button
+                    onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                    className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Settings ▾
+                  </button>
+                  {showSettingsMenu && (
+                    <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                      <div className="py-1">
+                        <button
+                          onClick={handleWorkspaceSettings}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          <svg className="inline-block w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                          Workspace Settings
+                        </button>
+                        <button
+                          onClick={handleAccountSettings}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          <svg className="inline-block w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          Account Settings
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => { clearWorkspace(); navigate('/workspaces'); }}
                   className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -150,6 +195,14 @@ const Navigation: React.FC = () => {
                   Workspaces
                 </button>
               </>
+            )}
+            {!currentWorkspace && (
+              <button
+                onClick={handleAccountSettings}
+                className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Account
+              </button>
             )}
             <button
               onClick={handleLogout}

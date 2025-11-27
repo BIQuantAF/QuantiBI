@@ -29,17 +29,14 @@ const WorkspaceSettings: React.FC = () => {
 
     try {
       // TODO: Implement actual invite functionality
-      console.log('🔍 Inviting user:', { email: inviteEmail, role: inviteRole });
-      
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      console.log('✅ Invite sent successfully');
       setInviteEmail('');
       setInviteRole('member');
       setShowInviteForm(false);
     } catch (error) {
-      console.error('❌ Failed to send invite:', error);
+      console.error('Failed to send invite:', error);
     } finally {
       setIsSubmitting(false);
     }

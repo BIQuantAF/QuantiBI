@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
+const { validate, validateDashboard, validateObjectId } = require('../middleware/validation');
 const Dashboard = require('../models/Dashboard');
 const Workspace = require('../models/Workspace');
 const Chart = require('../models/Chart');
@@ -40,7 +41,12 @@ router.get('/:workspaceId/dashboards', authenticateUser, async (req, res) => {
  * @desc    Delete a dashboard
  * @access  Private
  */
-router.delete('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (req, res) => {
+router.delete('/:workspaceId/dashboards/:dashboardId', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('dashboardId'), 
+  validate, 
+  async (req, res) => {
   try {
     const { workspaceId, dashboardId } = req.params;
     console.log(`[DELETE] Dashboard: workspaceId=${workspaceId}, dashboardId=${dashboardId}, user=${req.user.uid}`);
@@ -88,7 +94,12 @@ router.delete('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (
  * @desc    Create a new dashboard
  * @access  Private
  */
-router.post('/:workspaceId/dashboards', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/dashboards', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateDashboard, 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -171,7 +182,13 @@ router.get('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (req
  * @desc    Update a dashboard
  * @access  Private
  */
-router.put('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (req, res) => {
+router.put('/:workspaceId/dashboards/:dashboardId', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('dashboardId'), 
+  validateDashboard, 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {
@@ -213,7 +230,12 @@ router.put('/:workspaceId/dashboards/:dashboardId', authenticateUser, async (req
  * @desc    Add a chart to a dashboard
  * @access  Private
  */
-router.post('/:workspaceId/dashboards/:dashboardId/charts', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/dashboards/:dashboardId/charts', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('dashboardId'), 
+  validate, 
+  async (req, res) => {
   try {
     const { chartId } = req.body;
     if (!chartId) {
@@ -270,7 +292,13 @@ router.post('/:workspaceId/dashboards/:dashboardId/charts', authenticateUser, as
  * @desc    Remove a chart from a dashboard
  * @access  Private
  */
-router.delete('/:workspaceId/dashboards/:dashboardId/charts/:chartId', authenticateUser, async (req, res) => {
+router.delete('/:workspaceId/dashboards/:dashboardId/charts/:chartId', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('dashboardId'), 
+  validateObjectId('chartId'), 
+  validate, 
+  async (req, res) => {
   try {
     const workspace = await Workspace.findById(req.params.workspaceId);
     if (!workspace) {

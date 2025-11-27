@@ -61,6 +61,61 @@ router.post('/create-checkout-session', authenticateUser, async (req, res) => {
 });
 
 /**
+ * Cancel user's subscription
+ * Protected: requires authentication
+ */
+router.post('/cancel-subscription', authenticateUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ uid: req.user.uid });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.plan !== 'pro') {
+      return res.status(400).json({ message: 'You do not have an active subscription' });
+    }
+
+    if (!user.subscriptionId) {
+      return res.status(400).json({ message: 'No subscription ID found' });
+    }
+
+    if (!stripe) {
+      // Mock behavior for local testing
+      console.log('Stripe not configured; simulating subscription cancellation for user:', req.user.uid);
+      await User.findOneAndUpdate(
+        { uid: req.user.uid },
+        { plan: 'free', subscriptionId: null },
+        { new: true }
+      );
+      return res.json({ 
+        message: 'Subscription canceled successfully (mock mode)',
+        plan: 'free'
+      });
+    }
+
+    // Cancel the subscription at period end (user retains access until billing period ends)
+    const subscription = await stripe.subscriptions.update(user.subscriptionId, {
+      cancel_at_period_end: true
+    });
+
+    console.log('Subscription marked for cancellation:', user.subscriptionId, 'for user:', req.user.uid);
+
+    res.json({ 
+      message: 'Subscription will be canceled at the end of the billing period',
+      cancelAt: subscription.cancel_at,
+      currentPeriodEnd: subscription.current_period_end
+    });
+  } catch (error) {
+    console.error('Error canceling subscription:', error);
+    res.status(500).json({ 
+      message: 'Failed to cancel subscription', 
+      error: error.message 
+    });
+  }
+});
+
+/**
  * Webhook handler for Stripe events.
  * This function is exported so the route can be mounted with `express.raw`
  * before the global JSON body parser, which is required for signature verification.

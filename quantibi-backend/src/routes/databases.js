@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const xlsx = require('xlsx');
 const { authenticateUser } = require('../middleware/auth');
+const { validate, validateDatabaseConnection, validateObjectId } = require('../middleware/validation');
+const { uploadLimiter } = require('../middleware/security');
 const Database = require('../models/Database');
 const Workspace = require('../models/Workspace');
 const Dataset = require('../models/Dataset');
@@ -19,7 +21,12 @@ const duckdbService = require('../services/duckdb');
  * @desc    Test Google BigQuery connection
  * @access  Private
  */
-router.post('/:workspaceId/databases/test-bigquery', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/databases/test-bigquery', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateDatabaseConnection, 
+  validate, 
+  async (req, res) => {
   try {
     const { projectId, credentials } = req.body;
     if (!projectId || !credentials) {
@@ -37,7 +44,12 @@ router.post('/:workspaceId/databases/test-bigquery', authenticateUser, async (re
  * @desc    List available BigQuery datasets and tables for debugging
  * @access  Private
  */
-router.post('/:workspaceId/databases/bigquery-datasets', authenticateUser, async (req, res) => {
+router.post('/:workspaceId/databases/bigquery-datasets', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateDatabaseConnection, 
+  validate, 
+  async (req, res) => {
   try {
     const { projectId, credentials } = req.body;
     if (!projectId || !credentials) {
@@ -79,16 +91,15 @@ const upload = multer({ storage: storage, limits: { fileSize: 100 * 1024 * 1024 
  * @desc    Connect a new database to a workspace
  * @access  Private
  */
-router.post('/:workspaceId/databases', authenticateUser, upload.single('file'), async (req, res) => {
+router.post('/:workspaceId/databases', 
+  uploadLimiter, 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  upload.single('file'), 
+  validateDatabaseConnection, 
+  validate, 
+  async (req, res) => {
   try {
-    console.log('Received database connection request:', {
-      workspaceId: req.params.workspaceId,
-      body: req.body,
-      file: req.file,
-      files: req.files,
-      headers: req.headers['content-type']
-    });
-
     const workspace = await Workspace.findById(req.params.workspaceId);
     
     if (!workspace) {
@@ -315,17 +326,16 @@ router.get('/:workspaceId/databases', authenticateUser, async (req, res) => {
  * @desc    Delete a database connection
  * @access  Private
  */
-router.delete('/:workspaceId/databases/:databaseId', authenticateUser, async (req, res) => {
+router.delete('/:workspaceId/databases/:databaseId', 
+  authenticateUser, 
+  validateObjectId('workspaceId'), 
+  validateObjectId('databaseId'), 
+  validate, 
+  async (req, res) => {
   try {
-    console.log('Deleting database:', {
-      workspaceId: req.params.workspaceId,
-      databaseId: req.params.databaseId
-    });
-
     const workspace = await Workspace.findById(req.params.workspaceId);
     
     if (!workspace) {
-      console.log('Workspace not found:', req.params.workspaceId);
       return res.status(404).json({ message: 'Workspace not found' });
     }
 
